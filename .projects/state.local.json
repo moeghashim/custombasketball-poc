@@ -18,6 +18,16 @@
       "requestedAt": "2026-06-15T02:43:13.956Z",
       "status": "complete"
     },
+    "daytona": {
+      "accountRequestId": "fprvcnn_61UroeP332HqzI0EP16USyeR0wSQFQxSjdH6rCSY4SgK",
+      "configuration": {},
+      "linkedAt": "2026-06-15T02:56:09.370Z",
+      "providerId": "prvdr_61UZ9SrkCMLr94xp859Vo",
+      "providerName": "Daytona",
+      "redirectUrl": null,
+      "requestedAt": "2026-06-15T02:56:09.370Z",
+      "status": "complete"
+    },
     "neon": {
       "accountRequestId": "fprvcnn_61UmyisYQME14BkSK16USyeR0wSQFQxSjdH6rCSY4MSW",
       "configuration": {},
@@ -26,6 +36,16 @@
       "providerName": "Neon",
       "redirectUrl": null,
       "requestedAt": "2026-06-01T18:40:46.356Z",
+      "status": "complete"
+    },
+    "render": {
+      "accountRequestId": "facctrq_61Uroh1vrCd73Mqir16USyeR0wSQFQxSjdH6rCSY42m8",
+      "configuration": {},
+      "linkedAt": "2026-06-15T02:58:52.857Z",
+      "providerId": "prvdr_61UVwArXdJpejOfkn5POi",
+      "providerName": "Render",
+      "redirectUrl": null,
+      "requestedAt": "2026-06-15T02:58:52.857Z",
       "status": "complete"
     }
   },
@@ -40,6 +60,36 @@
       "providerName": "Blaxel",
       "resourceId": "fres_61UroWEYkWPzro4dA16USyeR0wSQFQxSjdH6rCSY4D7w",
       "serviceId": "tier-1"
+    },
+    "daytona-preview-sandbox": {
+      "configuration": {
+        "name": "custombasketball-preview",
+        "language": "typescript",
+        "target": "us",
+        "public": true,
+        "auto_stop_interval": 15,
+        "auto_archive_interval": 10080,
+        "auto_delete_interval": -1
+      },
+      "createdAt": "2026-06-15T02:58:33.021Z",
+      "lastRevealedAt": "2026-06-15T02:58:33.474Z",
+      "lastStatus": "complete",
+      "name": "daytona-preview-sandbox",
+      "providerId": "prvdr_61UZ9SrkCMLr94xp859Vo",
+      "providerName": "Daytona",
+      "resourceId": "fres_61UroghGuvtqQvgkk16USyeR0wSQFQxSjdH6rCSY45s0",
+      "serviceId": "sandbox"
+    },
+    "daytona-top-up-25": {
+      "configuration": {},
+      "createdAt": "2026-06-15T02:57:30.027Z",
+      "lastRevealedAt": "2026-06-15T02:57:30.461Z",
+      "lastStatus": "complete",
+      "name": "daytona-top-up-25",
+      "providerId": "prvdr_61UZ9SrkCMLr94xp859Vo",
+      "providerName": "Daytona",
+      "resourceId": "fres_61Urofcz56XSokTFg16USyeR0wSQFQxSjdH6rCSY47yq",
+      "serviceId": "top-up-0025"
     },
     "maestro-db": {
       "configuration": {},

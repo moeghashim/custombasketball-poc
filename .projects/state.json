@@ -4,8 +4,14 @@
     "blaxel": {
       "name": "Blaxel"
     },
+    "daytona": {
+      "name": "Daytona"
+    },
     "neon": {
       "name": "Neon"
+    },
+    "render": {
+      "name": "Render"
     }
   },
   "resources": {
@@ -13,6 +19,16 @@
       "name": "blaxel-tier-1",
       "providerName": "Blaxel",
       "serviceId": "tier-1"
+    },
+    "daytona-preview-sandbox": {
+      "name": "daytona-preview-sandbox",
+      "providerName": "Daytona",
+      "serviceId": "sandbox"
+    },
+    "daytona-top-up-25": {
+      "name": "daytona-top-up-25",
+      "providerName": "Daytona",
+      "serviceId": "top-up-0025"
     },
     "maestro-db": {
       "name": "maestro-db",
