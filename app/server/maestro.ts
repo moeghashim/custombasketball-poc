@@ -187,10 +187,13 @@ async function dispatchJob(job: JobRecord): Promise<void> {
     .filter(Boolean)
     .join(" ");
 
-  await sandbox.process.exec({
+  const processResult = await sandbox.process.exec({
     name: `job-${job.id}`,
     command: `${envPrefix} ${command}`,
+    waitForCompletion: true,
+    timeout: 10 * 60 * 1000,
   });
+  assertProcessSucceeded(processResult);
 }
 
 async function cleanupSandbox(job: JobRecord): Promise<void> {
@@ -215,4 +218,15 @@ function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
   return value;
+}
+
+function assertProcessSucceeded(result: Record<string, unknown>): void {
+  const rawExitCode = result.exitCode ?? result.exit_code;
+  const exitCode = typeof rawExitCode === "number" ? rawExitCode : null;
+  if (exitCode === null || exitCode === 0) return;
+
+  const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+  const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+  const detail = stderr || stdout || `exit code ${exitCode}`;
+  throw new Error(`Sandbox process failed: ${detail}`);
 }

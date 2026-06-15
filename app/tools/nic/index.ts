@@ -188,9 +188,14 @@ function buildStorefront() {
 }
 
 function parseBrief(): JobRequest {
-  const raw = process.argv[process.argv.indexOf("--brief") + 1];
-  if (!raw) throw new Error("missing --brief");
+  const raw = flagValue("--brief");
   return JSON.parse(raw) as JobRequest;
+}
+
+function flagValue(name: string): string {
+  const index = process.argv.indexOf(name);
+  if (index === -1 || index === process.argv.length - 1) throw new Error(`missing ${name}`);
+  return process.argv[index + 1];
 }
 
 function requiredEnv(name: string): string {

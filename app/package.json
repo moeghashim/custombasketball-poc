@@ -12,8 +12,8 @@
     "start": "tsx server/maestro.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run build:tools",
-    "build:tools": "esbuild tools/nic/index.ts --bundle --platform=node --target=node20 --format=esm --banner:js='#!/usr/bin/env node' --outfile=dist/tools/nic.js && esbuild tools/max/index.ts --bundle --platform=node --target=node20 --format=esm --banner:js='#!/usr/bin/env node' --outfile=dist/tools/max.js",
-    "prepare:image": "npm run build:tools && chmod +x dist/tools/nic.js dist/tools/max.js",
+    "build:tools": "esbuild tools/nic/index.ts --bundle --packages=external --platform=node --target=node20 --format=esm --outfile=dist/tools/nic.js && esbuild tools/max/index.ts --bundle --packages=external --platform=node --target=node20 --format=esm --outfile=dist/tools/max.js",
+    "prepare:image": "npm run build:tools",
     "push:image": "npm run prepare:image && bl push"
   },
   "dependencies": {
