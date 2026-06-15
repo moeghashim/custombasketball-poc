@@ -102,6 +102,28 @@
       "resourceId": "fres_61UroRUTYhUCnfASq16USyeR0wSQFQxSjdH6rCSY4HMO",
       "serviceId": "postgres"
     },
+    "maestro-render": {
+      "configuration": {
+        "name": "custombasketball-maestro",
+        "repo": "https://github.com/moeghashim/custombasketball-poc",
+        "branch": "codex/custombasketball-poc",
+        "root_dir": "app",
+        "runtime": "node",
+        "build_command": "npm install && npm run build",
+        "start_command": "npm start",
+        "health_check_path": "/health",
+        "region": "oregon",
+        "auto_deploy": "yes"
+      },
+      "createdAt": "2026-06-15T03:01:33.155Z",
+      "lastRevealedAt": "2026-06-15T03:01:33.827Z",
+      "lastStatus": "complete",
+      "name": "maestro-render",
+      "providerId": "prvdr_61UVwArXdJpejOfkn5POi",
+      "providerName": "Render",
+      "resourceId": "fres_61UrojYs2yDziMvJb16USyeR0wSQFQxSjdH6rCSY4HV2",
+      "serviceId": "web-service"
+    },
     "specialist-sandbox": {
       "configuration": {
         "display_name": "custombasketball-specialists",

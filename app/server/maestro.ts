@@ -1,10 +1,14 @@
 import express from "express";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJob, getJob, migrate, updateJobStatus, waitForTerminalJob } from "./db.js";
+import { normalizeRuntimeEnv } from "./runtime-env.js";
 import { addSseClient, broadcastFlow } from "./sse.js";
 import { installWebhook } from "./webhook.js";
 import type { AgentName, JobRecord, StageId } from "../shared/types.js";
+
+normalizeRuntimeEnv();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
@@ -31,7 +35,7 @@ app.get("/api/events", (req, res) => {
 });
 
 app.post("/api/run", async (req, res) => {
-  const runId = crypto.randomUUID();
+  const runId = randomUUID();
   const baseUrl = publicBaseUrl(req);
   res.json({ ok: true, run_id: runId });
 
@@ -44,7 +48,7 @@ app.post("/api/run", async (req, res) => {
 });
 
 app.use(express.static(webRoot));
-app.get("*", (_req, res) => res.sendFile(path.join(webRoot, "index.html")));
+app.use((_req, res) => res.sendFile(path.join(webRoot, "index.html")));
 
 await migrate();
 
@@ -74,7 +78,7 @@ async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
     },
   });
   nic.input.callback_url = `${baseUrl}/api/jobs/${nic.id}/ingest`;
-  await dispatchJob(nic);
+  await dispatchOrFail(nic);
 
   const nicDone = await waitForTerminalJob(nic.id);
   await cleanupSandbox(nicDone).catch((error) => console.warn(`cleanup failed for ${nic.id}:`, error));
@@ -95,7 +99,7 @@ async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
     brief: { url: siteUrl },
   });
   max.input.callback_url = `${baseUrl}/api/jobs/${max.id}/ingest`;
-  await dispatchJob(max);
+  await dispatchOrFail(max);
 
   const maxDone = await waitForTerminalJob(max.id);
   await cleanupSandbox(maxDone).catch((error) => console.warn(`cleanup failed for ${max.id}:`, error));
@@ -109,6 +113,16 @@ async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
     text: "Maestro received Max's suggestions and would execute them after approval.",
     run_id: runId,
   });
+}
+
+async function dispatchOrFail(job: JobRecord): Promise<void> {
+  try {
+    await dispatchJob(job);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await updateJobStatus(job.id, "failed", { error: message });
+    throw error;
+  }
 }
 
 async function dispatchJob(job: JobRecord): Promise<void> {

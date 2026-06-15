@@ -35,6 +35,11 @@
       "providerName": "Neon",
       "serviceId": "postgres"
     },
+    "maestro-render": {
+      "name": "maestro-render",
+      "providerName": "Render",
+      "serviceId": "web-service"
+    },
     "specialist-sandbox": {
       "name": "specialist-sandbox",
       "providerName": "Blaxel",

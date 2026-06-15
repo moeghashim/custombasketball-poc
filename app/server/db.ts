@@ -1,13 +1,16 @@
 import pg from "pg";
 import { randomBytes, randomUUID } from "node:crypto";
+import { normalizeRuntimeEnv } from "./runtime-env.js";
 import type { AgentName, JobRecord, JobRequest, JobStatus, ToolResult } from "../shared/types.js";
 
 const { Pool } = pg;
 
+normalizeRuntimeEnv();
+
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  console.warn("DATABASE_URL is not set; Maestro will fail until Neon credentials are pulled.");
+  console.warn("DATABASE_URL or NEON_CONNECTION_STRING is not set; Maestro will fail until Neon credentials are pulled.");
 }
 
 export const pool = new Pool({

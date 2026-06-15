@@ -1,5 +1,7 @@
 FROM node:20-slim
 
+COPY --from=ghcr.io/blaxel-ai/sandbox:latest /sandbox-api /usr/local/bin/sandbox-api
+
 RUN apt-get update \
   && apt-get install -y --no-install-recommends chromium python3 ca-certificates fonts-liberation \
   && rm -rf /var/lib/apt/lists/*
