@@ -47,6 +47,12 @@ interface KimiSiteResponse {
 
 const execFileAsync = promisify(execFile);
 const LIVE_TIMEOUT_MS = 180_000;
+const LIVE_FETCH_TIMEOUT_MS = 5_000;
+
+interface RailwayDeployEvents {
+  onCandidateUrl?: (url: string) => Promise<void>;
+  onWaitStatus?: (attempt: number, status: string) => Promise<void>;
+}
 
 main().catch(async (error) => {
   console.error(error);
@@ -80,7 +86,20 @@ async function main(): Promise<void> {
     await send({ event: "progress", step: "build", n: 4 });
     await send({ event: "log", step: "build", kind: "arr", text: "deploying generated site to Railway" });
 
-    const deployment = await deployRailwaySite(appDir, project);
+    let announcedUrl = "";
+    const deployment = await deployRailwaySite(appDir, project, {
+      onCandidateUrl: async (url) => {
+        if (announcedUrl === url) return;
+        announcedUrl = url;
+        await send({ event: "data", step: "build", patch: { url } });
+        await send({ event: "log", step: "build", kind: "ok", text: `Railway URL reserved · ${url}` });
+      },
+      onWaitStatus: async (attempt, status) => {
+        if (attempt === 1 || attempt % 10 === 0) {
+          await send({ event: "log", step: "build", kind: "dim", text: `waiting for Railway to serve 200 (${status})` });
+        }
+      },
+    });
     await send({ event: "data", step: "build", patch: { url: deployment.url } });
     await send({ event: "log", step: "build", kind: "ok", text: `live · ${deployment.url}` });
     await send({ event: "progress", step: "build", n: 5 });
@@ -148,7 +167,11 @@ createServer((req, res) => {
   );
 }
 
-async function deployRailwaySite(cwd: string, project: string): Promise<{ url: string; project: string; service?: string }> {
+async function deployRailwaySite(
+  cwd: string,
+  project: string,
+  events: RailwayDeployEvents = {},
+): Promise<{ url: string; project: string; service?: string }> {
   const configuredProject = optionalEnv(["RAILWAY_PROJECT_ID", "GENERATED_SITE_HOST_PROJECT_ID"]);
   const configuredService = optionalEnv(["RAILWAY_SERVICE_ID", "RAILWAY_SERVICE_NAME", "GENERATED_SITE_HOST_SERVICE_ID"]);
   const configuredEnvironment = optionalEnv(["RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_ID", "GENERATED_SITE_HOST_ENVIRONMENT_ID"]);
@@ -179,7 +202,8 @@ async function deployRailwaySite(cwd: string, project: string): Promise<{ url: s
     findRailwayUrl(await runRailway(["status", "--json"], cwd));
 
   if (!url) throw new Error("Railway did not return or expose a public deployment URL");
-  if (await waitForLiveUrl(url)) return { url, project: configuredProject || project, service };
+  await events.onCandidateUrl?.(url);
+  if (await waitForLiveUrl(url, events.onWaitStatus)) return { url, project: configuredProject || project, service };
 
   throw new Error(`Railway deployment did not become live within ${LIVE_TIMEOUT_MS / 1000}s`);
 }
@@ -232,18 +256,34 @@ async function runRailway(args: string[], cwd: string): Promise<string> {
   return `${result.stdout || ""}${result.stderr || ""}`;
 }
 
-async function waitForLiveUrl(url: string): Promise<boolean> {
+async function waitForLiveUrl(url: string, onWaitStatus?: (attempt: number, status: string) => Promise<void>): Promise<boolean> {
   const deadline = Date.now() + LIVE_TIMEOUT_MS;
+  let attempt = 0;
   while (Date.now() < deadline) {
+    attempt += 1;
+    let status = "network pending";
     try {
-      const response = await fetch(url, { method: "GET", redirect: "follow" });
+      const response = await fetchWithTimeout(url, LIVE_FETCH_TIMEOUT_MS);
       if (response.status === 200) return true;
-    } catch {
+      status = `HTTP ${response.status}`;
+    } catch (error) {
       // Railway domains can take a few seconds to route to the fresh deployment.
+      status = error instanceof Error && error.name === "AbortError" ? "request timeout" : "network pending";
     }
+    await onWaitStatus?.(attempt, status);
     await delay(1500);
   }
   return false;
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { method: "GET", redirect: "follow", signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function railwayProjectName(jobId: string): string {
