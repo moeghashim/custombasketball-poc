@@ -21,13 +21,12 @@ build the app under `app/` (layout in §7).
   **Commit and push as you go.** **Do not** add this POC to the tenwhy repo.
 
 ### Before you build — verify (don't guess)
-- `stripe projects catalog render · neon · blaxel` — confirm the exact service
+- `stripe projects catalog render · neon · blaxel · railway` — confirm the exact service
   refs, **and that your country supports paid provisioning** for them.
 - **Blaxel:** how to build + push a custom sandbox image (the Node 20 + Chromium + CLIs
   image) — check the Blaxel docs.
-- **Cloudflare Pages:** the non-interactive **direct-upload** flow with `wrangler`
-  (`wrangler pages project create` / `wrangler pages deploy ./dist`) and the API-token
-  scope it needs — **Account → Cloudflare Pages: Edit** for the correct Account ID.
+- **Railway:** verify `railway/hosting` exists in Stripe Projects and that the Railway
+  CLI can deploy non-interactively with `RAILWAY_API_TOKEN` or `RAILWAY_TOKEN`.
 - The 5 jerseys' demo content (names / designs / prices) is yours to invent — keep it
   plausible.
 
@@ -40,7 +39,7 @@ always-on orchestrator) runs two specialists in sequence, each **in its own sand
 with the page narrating it all **live**:
 
 1. **Nic** (website builder) → builds **`custombasketball`** with **5 custom jerseys**,
-   deploys it to **Cloudflare Pages**, returns a durable live URL.
+   deploys it to **Railway**, returns a durable live URL.
 2. **Max** (SEO) → audits that live site, produces **suggested changes**, hands them
    back to Maestro.
 
@@ -51,8 +50,8 @@ and watching (plus a peek at Maestro's DB):
 
 1. **One button runs everything.** Click → Maestro runs Nic then Max, no other steps.
 2. **Nic builds the store → a real, durable live URL** — `custombasketball`
-   with 5 jerseys, deployed to **Cloudflare Pages** and still reachable at its
-   `*.pages.dev` URL after the run finishes. *(user #1)*
+   with 5 jerseys, deployed to **Railway** and still reachable at its Railway-provided
+   domain after the run finishes. *(user #1)*
 3. **Max audits that live URL and produces concrete output** — real findings (SEO score
    + specific issues) and a list of **suggested changes**.
 4. **Max hands the suggestions to Maestro**, which receives them and acknowledges "would
@@ -118,7 +117,7 @@ contract, or the sandbox.
         │  fire job (signed request)                  ▲ signed events + result
         ▼                                             │ (HTTPS webhook)
 [ Blaxel sandbox — ephemeral, one per job ]  run `nic build` / `max audit`
-        └─ Nic → deploy site to Cloudflare Pages → { url }   Max → Lighthouse(url) → { suggestions }
+        └─ Nic → deploy site to Railway → { url }   Max → Lighthouse(url) → { suggestions }
 ```
 
 **The round trip, per step:**
@@ -146,8 +145,8 @@ contract, or the sandbox.
   validates + records it, advances.
 - **Deployed, not local.** Maestro runs as a **Render web service** (provisioned via
   Stripe Projects), so it has a stable public URL — the Blaxel sandboxes post their signed
-  results straight to it, no tunnel. Render's env carries the Stripe Projects creds (Neon,
-  Blaxel) plus the Cloudflare Pages creds (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`).
+  results straight to it, no tunnel. Render's env carries the Stripe Projects creds
+  (Neon, Blaxel, Railway).
 
 ### Building the CLIs (Nic & Max)
 Nic and Max are the two **tools**, built as **CLIs** — the unit of work in tenwhy
@@ -186,21 +185,17 @@ shared helper is enough. Note in comments where the real version differs.
 - CLI `nic build`, running inside its **Blaxel** sandbox. Generates **`custombasketball`**
   — a static store with **5 custom jerseys** from a **hard-coded template** + placeholder
   imagery (no LLM).
-- **Deploys the built `./dist` to Cloudflare Pages** via `wrangler` direct upload
-  (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` injected by Maestro). Use a per-run
-  project name `cb-<job_id>` (DNS-safe slug): `wrangler pages project create <project>
-  --production-branch=main` (idempotent — ignore "already exists") → `wrangler pages deploy
-  ./dist --project-name=<project> --branch=main` (run with `CI=true`). The durable URL is
-  **deterministic** — `https://<project>.pages.dev` — served from Cloudflare's CDN, so it
-  stays reachable after the run for Max to audit and the demo to show. Before returning,
-  poll the URL until it serves 200 (so Max never audits a not-yet-live URL).
-- Emits `log` events through generate + deploy, a `data {url}` patch with the Pages URL,
+- **Deploys the generated site to Railway** via the `railway` CLI installed in the shared
+  Blaxel image. Nic packages the static files with a tiny Node 20 static server, creates
+  or targets a Railway hosting service, uploads it with `railway up`, generates or reads
+  the Railway public domain, and polls it until it serves 200.
+- Emits `log` events through generate + deploy, a `data {url}` patch with the Railway URL,
   then the final result `{ url }`. Generated sites do not auto-expire; for the POC,
-  keep them and delete Pages projects explicitly with the cleanup helper when archiving.
+  keep them and delete Railway projects explicitly with the cleanup helper when archiving.
 
 ### Max — the SEO specialist
 - CLI `max audit --brief '{… url …}'`, running inside its **Blaxel** sandbox. Runs
-  **Lighthouse** (`lighthouse` + `chrome-launcher`) against the Cloudflare Pages URL → the **SEO
+  **Lighthouse** (`lighthouse` + `chrome-launcher`) against the Railway URL → the **SEO
   category score** + the failing audits.
 - **Why a Chrome-capable image:** Lighthouse doesn't read HTML — it *loads the page in a
   real headless Chromium* and measures it (that's where the SEO/perf/a11y scores come
@@ -216,13 +211,12 @@ shared helper is enough. Note in comments where the real version differs.
   `report` stage completing with `doneLabel: "Handed to Maestro"`, Maestro acknowledges.
   The POC does **not** execute the fixes (out of scope).
 
-> **Future — hosting is a router, not one vendor.** The POC hosts every generated site on
-> Cloudflare Pages because they're static. In production, Nic routes **by app type**:
-> **Cloudflare** for static and SSR/edge apps (Pages/Workers), **Railway** for apps that
-> need a persistent always-on server or an arbitrary container/Docker runtime. The job
-> contract doesn't change — Nic just returns a durable `url`; the host behind it is chosen
-> per build. (Out of scope for the POC; noted so this Daytona→Cloudflare swap is understood
-> as the first leg of that router.)
+> **Future — hosting is a router, not one vendor.** The POC now uses Railway because it is
+> provisionable through Stripe Projects and can host the generated app durably. In
+> production, Nic routes **by app type**: **Cloudflare** for static and SSR/edge apps
+> (Pages/Workers), **Railway** for apps that need a persistent always-on server or an
+> arbitrary container/Docker runtime. The job contract doesn't change — Nic just returns a
+> durable `url`; the host behind it is chosen per build.
 
 ---
 
@@ -246,21 +240,19 @@ contract, the signed webhook round trip, and **Blaxel sandboxes** for the specia
 1. **Scaffold** `app/` (one npm project: TypeScript, Node 20, tsx).
 2. **Provision via Stripe Projects:** `stripe plugin install projects` → `projects init`
    → `projects add neon` → `projects add render` → `projects add blaxel` →
-   `projects env --pull` (lands `DATABASE_URL`, Blaxel creds). **Cloudflare is not a Stripe
-   Projects vendor** — create a Cloudflare API token scoped
-   **Account → Cloudflare Pages: Edit**, note the **Account ID**, and set
-   `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` in Maestro's Render env
-   (Pages free tier — nothing to track in `stripe projects spend`).
+   `projects add railway/hosting` → `projects env --pull` (lands `DATABASE_URL`,
+   Blaxel creds, and Railway hosting/token variables). Set the Railway env vars in
+   Maestro's Render env so Nic's sandbox can deploy.
 3. **Maestro core + deploy:** Express + Neon (`jobs`, `results` + the state machine) +
    `POST /api/run`, `GET /api/events` (SSE), and the **signed webhook** `POST
    /api/jobs/:id/ingest`. **Deploy to Render** so the webhook has a public URL.
 4. **Recreate the Process Steps page** in live mode; drive its controller from the SSE
    stream (prove it with fake events first).
-5. **The `nic build` CLI:** generate `custombasketball` (5 jerseys) → deploy `./dist` to
-   Cloudflare Pages (`wrangler`, durable `*.pages.dev` URL) → POST `log`/`data`/`complete`
+5. **The `nic build` CLI:** generate `custombasketball` (5 jerseys) → deploy the generated
+   app to Railway (`railway up`, durable Railway domain) → POST `log`/`data`/`complete`
    events + final `{ url }` to the callback.
-6. **The `max audit` CLI:** Lighthouse the Cloudflare Pages URL → POST `report`-stage events
-   + final `{ findings, suggestions }`.
+6. **The `max audit` CLI:** Lighthouse the Railway URL → POST `report`-stage events +
+   final `{ findings, suggestions }`.
 7. **Blaxel wiring:** Maestro creates a Blaxel sandbox per job (`@blaxel/core`), injects the
    brief + secrets, `exec`s the CLI, tears it down on result. (Max's image is Chrome-capable.)
 8. **Wire the callback:** Maestro passes its public **Render URL** as `callback_url` in
@@ -271,7 +263,7 @@ contract, the signed webhook round trip, and **Blaxel sandboxes** for the specia
 ## 6. Definition of done
 - Click **Create the website** → Maestro fires Nic, then Max — each in its **own Blaxel
   sandbox** — and the **`jobs` table shows the two jobs** moving through the state machine.
-- Nic builds `custombasketball` (5 jerseys), deploys it to **Cloudflare Pages**, and yields
+- Nic builds `custombasketball` (5 jerseys), deploys it to **Railway**, and yields
   a **real, durable live URL** that survives past the end of the run.
 - Max audits the URL with **Lighthouse** → findings + suggestions; **POSTs a signed
   result** to Maestro, which records it and acknowledges "would execute".
@@ -286,14 +278,14 @@ Build exactly this; don't substitute.
 
 | Concern | Locked choice |
 |---|---|
-| Provisioning · creds · billing | **Stripe Projects** — `add neon`, `add render`, `add blaxel`; `env --pull`. *(success #2)* (Cloudflare Pages is separate — a direct, free account.) |
+| Provisioning · creds · billing | **Stripe Projects** — `add neon`, `add render`, `add blaxel`, `add railway/hosting`; `env --pull`. *(success #2)* |
 | Maestro's store | **Neon Postgres** via Stripe Projects — `jobs` + `results` tables + the state machine. |
 | Specialist sandbox | **Blaxel** (`@blaxel/core`) — ephemeral, one sandbox per job (`createIfNotExists` → `process.exec` → `delete`). Provisioned via Stripe Projects. Max's image is **Chrome-capable**. |
-| Generated-site host | **Cloudflare Pages** (`wrangler` direct upload; `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` — a direct Cloudflare account, **not** Stripe Projects). Nic deploys `./dist` to a per-run project `cb-<job_id>` → durable CDN URL `https://cb-<job_id>.pages.dev`. |
+| Generated-site host | **Railway hosting** via Stripe Projects. Nic packages the generated site as a tiny Node 20 static server, deploys with the Railway CLI, and returns the Railway public URL. |
 | Language · runtime · pkg-mgr | **TypeScript** · **Node 20** · **`tsx`** · **npm**. |
 | Maestro service | **Express** + **SSE** (`/api/run`, `/api/events`) + a **signed webhook** (`/api/jobs/:id/ingest`). **Deployed to Render** via Stripe Projects (public URL — sandboxes post straight to it, no tunnel). |
 | The page | **The design, recreated as-is** — React + Babel from CDN, no build step; live mode. |
-| Nic | CLI `nic build` (in a Blaxel sandbox); **hard-coded** `custombasketball` (5 jerseys); deploys the site to **Cloudflare Pages**. |
+| Nic | CLI `nic build` (in a Blaxel sandbox); **hard-coded** `custombasketball` (5 jerseys); deploys the site to **Railway**. |
 | Max | CLI `max audit` (in a Chrome-capable Blaxel sandbox); **Lighthouse** → suggestions. |
 | Job contract | Request `{ job_id, agent, task, brief, callback_url }` + HMAC secret → **HMAC-signed** events + final `{ok,data,error,meta}` to Maestro's webhook. |
 
@@ -303,7 +295,7 @@ Build exactly this; don't substitute.
 ├── process.md
 ├── design/…                  # the Claude Design bundle — read-only reference
 └── app/                      # one npm project (TypeScript · Node 20 · tsx · npm)
-    ├── package.json          # express, @blaxel/core, wrangler, pg, lighthouse, chrome-launcher, …
+    ├── package.json          # express, @blaxel/core, @railway/cli, pg, lighthouse, chrome-launcher, …
     ├── server/
     │   ├── maestro.ts        # orchestrator: state machine, fires specialists into Blaxel
     │   ├── db.ts             # Neon Postgres — jobs, results
@@ -315,10 +307,9 @@ Build exactly this; don't substitute.
         └── max/              # max audit CLI  (runs inside a Blaxel sandbox)
 ```
 
-**Accounts that must exist:** Neon, Render, Blaxel **(via Stripe Projects** — confirm catalog
-refs with `stripe projects catalog <name>`**)**, plus a **Cloudflare** account (Pages, free —
-direct, not via Stripe Projects). Blaxel needs a Node-20 base image — and for Max, a
-**Chrome-capable** one (see Max, above).
+**Accounts that must exist:** Neon, Render, Blaxel, and Railway **(via Stripe Projects** —
+confirm catalog refs with `stripe projects catalog <name>`**)**. Blaxel needs a Node-20
+base image — and for Max, a **Chrome-capable** one (see Max, above).
 
 ---
 
@@ -331,8 +322,8 @@ direct, not via Stripe Projects). Blaxel needs a Node-20 base image — and for 
 - **Blaxel (specialist sandboxes):** `https://docs.blaxel.ai/Sandboxes/Overview`,
   `…/Sandboxes/Processes`, SDK `https://docs.blaxel.ai/sdk-reference/introduction`
   (package `@blaxel/core`).
-- **Cloudflare Pages (generated-site host):** `https://developers.cloudflare.com/pages/`
-  — **direct upload** with `wrangler` (`pages project create` / `pages deploy`), the
-  `*.pages.dev` URL, and API-token scopes.
+- **Railway (generated-site host):** `https://docs.railway.com/cli`,
+  `https://docs.railway.com/cli/deploying`, and
+  `https://docs.railway.com/networking/public-networking`.
 - **Render (Maestro host):** a web service, provisioned via Stripe Projects.
 - **Neon (Maestro DB):** Postgres; provisioned via Stripe Projects (`DATABASE_URL`).

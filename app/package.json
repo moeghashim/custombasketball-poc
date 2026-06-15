@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run build:tools",
     "build:tools": "esbuild tools/nic/index.ts --bundle --packages=external --platform=node --target=node20 --format=esm --outfile=dist/tools/nic.js && esbuild tools/max/index.ts --bundle --packages=external --platform=node --target=node20 --format=esm --outfile=dist/tools/max.js",
-    "delete:pages": "tsx tools/nic/delete-pages-project.ts",
+    "delete:railway": "tsx tools/nic/delete-railway-project.ts",
     "prepare:image": "npm run build:tools",
     "push:image": "npm run prepare:image && bl push"
   },
@@ -26,11 +26,11 @@
     "tsx": "^4.21.0"
   },
   "devDependencies": {
+    "@railway/cli": "5.12.1",
     "@types/express": "^5.0.6",
     "@types/node": "^20.19.25",
     "@types/pg": "^8.15.6",
     "esbuild": "^0.27.1",
-    "typescript": "^5.9.3",
-    "wrangler": "4.50.0"
+    "typescript": "^5.9.3"
   }
 }

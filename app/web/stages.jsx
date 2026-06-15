@@ -38,7 +38,7 @@ function StageBuild({ data, progress, started }) {
             <span className="tl"></span><span className="tl"></span><span className="tl"></span>
             {liveUrl
               ? <a className="br-url" href={liveUrl} target="_blank" rel="noreferrer">{liveUrl}</a>
-              : <span className="br-url">{data.url || 'Waiting for Cloudflare Pages URL'}</span>}
+              : <span className="br-url">{data.url || 'Waiting for Railway URL'}</span>}
           </div>
           <div className="br-canvas">
             <div className={`wf wf-nav${p >= 1 ? ' on' : ''}`}>

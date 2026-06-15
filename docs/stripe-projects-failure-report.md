@@ -4,7 +4,7 @@ Report date: June 15, 2026
 
 Project: `custombasketball-poc`
 
-Outcome before the Cloudflare Pages host swap: the POC worked after manual workarounds, except Render was still on a Free instance because paid plan selection through Stripe Projects failed. A verified run on June 15, 2026 created the generated preview `https://3000-hxuevv5eiaoqddxr.daytonaproxy01.net`, Max returned a Lighthouse SEO score of 82, and Maestro emitted the final ack with the generated summary.
+Historical outcome before the generated-site host swaps: the POC worked after manual workarounds, except Render was still on a Free instance because paid plan selection through Stripe Projects failed. A verified run on June 15, 2026 created the generated preview `https://3000-hxuevv5eiaoqddxr.daytonaproxy01.net`, Max returned a Lighthouse SEO score of 82, and Maestro emitted the final ack with the generated summary.
 
 ## Issues
 

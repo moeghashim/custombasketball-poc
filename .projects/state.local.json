@@ -38,6 +38,16 @@
       "requestedAt": "2026-06-01T18:40:46.356Z",
       "status": "complete"
     },
+    "railway": {
+      "accountRequestId": "facctrq_61Us2JFG94TAfI2I216USyeR0wSQFQxSjdH6rCSY4Iim",
+      "configuration": {},
+      "linkedAt": "2026-06-15T17:31:14.835Z",
+      "providerId": "prvdr_61UK2uWsoydL7tUBp57Fg",
+      "providerName": "Railway",
+      "redirectUrl": null,
+      "requestedAt": "2026-06-15T17:31:14.835Z",
+      "status": "complete"
+    },
     "render": {
       "accountRequestId": "facctrq_61Uroh1vrCd73Mqir16USyeR0wSQFQxSjdH6rCSY42m8",
       "configuration": {},
@@ -90,6 +100,17 @@
       "providerName": "Daytona",
       "resourceId": "fres_61Urofcz56XSokTFg16USyeR0wSQFQxSjdH6rCSY47yq",
       "serviceId": "top-up-0025"
+    },
+    "generated-site-host": {
+      "configuration": {},
+      "createdAt": "2026-06-15T17:31:16.343Z",
+      "lastRevealedAt": null,
+      "lastStatus": "needs_information",
+      "name": "generated-site-host",
+      "providerId": "prvdr_61UK2uWsoydL7tUBp57Fg",
+      "providerName": "Railway",
+      "resourceId": "fres_61Us2JHd633xFqczH16USyeR0wSQFQxSjdH6rCSY4FEm",
+      "serviceId": "hosting"
     },
     "maestro-db": {
       "configuration": {},

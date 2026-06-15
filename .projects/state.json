@@ -10,6 +10,9 @@
     "neon": {
       "name": "Neon"
     },
+    "railway": {
+      "name": "Railway"
+    },
     "render": {
       "name": "Render"
     }
@@ -29,6 +32,11 @@
       "name": "daytona-top-up-25",
       "providerName": "Daytona",
       "serviceId": "top-up-0025"
+    },
+    "generated-site-host": {
+      "name": "generated-site-host",
+      "providerName": "Railway",
+      "serviceId": "hosting"
     },
     "maestro-db": {
       "name": "maestro-db",

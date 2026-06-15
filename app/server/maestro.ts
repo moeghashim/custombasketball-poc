@@ -114,7 +114,7 @@ async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
     brief: {
       brand: "custombasketball",
       product_count: 5,
-      deployment: "cloudflare-pages",
+      deployment: "railway",
     },
   });
   nic.input.callback_url = `${baseUrl}/api/jobs/${nic.id}/ingest`;
@@ -222,10 +222,11 @@ function commandFor(agent: AgentName, task: string, request: Record<string, unkn
 
 function envForJob(agent: AgentName): string[] {
   if (agent !== "nic") return [];
-  return [
-    `CLOUDFLARE_API_TOKEN=${shellQuote(requiredEnv("CLOUDFLARE_API_TOKEN"))}`,
-    `CLOUDFLARE_ACCOUNT_ID=${shellQuote(requiredEnv("CLOUDFLARE_ACCOUNT_ID"))}`,
-  ];
+  const keys = Object.keys(process.env).filter((key) => /^(RAILWAY|GENERATED_SITE_HOST)_/.test(key));
+  if (!keys.some((key) => /^RAILWAY_(API_)?TOKEN$/.test(key) || /^GENERATED_SITE_HOST_.*TOKEN$/.test(key))) {
+    throw new Error("RAILWAY_API_TOKEN or RAILWAY_TOKEN is required");
+  }
+  return keys.map((key) => `${key}=${shellQuote(requiredEnv(key))}`);
 }
 
 function shellQuote(value: string): string {

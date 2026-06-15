@@ -10,11 +10,11 @@ import type { FlowEvent, JobRequest, ToolResult } from "../../shared/types.js";
 interface NicData {
   url: string;
   project?: string;
+  service?: string;
 }
 
 const execFileAsync = promisify(execFile);
-const PAGES_BRANCH = "main";
-const LIVE_TIMEOUT_MS = 45_000;
+const LIVE_TIMEOUT_MS = 180_000;
 
 main().catch(async (error) => {
   console.error(error);
@@ -31,34 +31,26 @@ async function main(): Promise<void> {
   await send({ event: "log", step: "build", kind: "dim", text: "generating static storefront template" });
 
   const site = buildStorefront();
-  const project = pagesProjectName(brief.job_id);
+  const project = railwayProjectName(brief.job_id);
   const workDir = await mkdtemp(path.join(os.tmpdir(), `nic-${project}-`));
-  const distDir = path.join(workDir, "dist");
+  const appDir = path.join(workDir, "app");
 
   await send({ event: "progress", step: "build", n: 1 });
   await send({ event: "log", step: "build", kind: "ok", text: "5 custom jerseys modeled" });
   await send({ event: "progress", step: "build", n: 2 });
-  await send({ event: "log", step: "build", kind: "dim", text: "writing responsive HTML/CSS bundle to ./dist" });
+  await send({ event: "log", step: "build", kind: "dim", text: "writing responsive HTML/CSS bundle to Railway app" });
 
   try {
-    await writeSite(distDir, site);
+    await writeRailwayApp(appDir, site);
     await send({ event: "progress", step: "build", n: 3 });
-    await send({ event: "log", step: "build", kind: "arr", text: `creating Cloudflare Pages project ${project}` });
-
-    const created = await ensurePagesProject(workDir, project);
-    await send({
-      event: "log",
-      step: "build",
-      kind: created ? "ok" : "dim",
-      text: created ? "Cloudflare Pages project ready" : "Cloudflare Pages project already exists",
-    });
+    await send({ event: "log", step: "build", kind: "arr", text: `creating Railway deployment ${project}` });
 
     await send({ event: "progress", step: "build", n: 4 });
-    await send({ event: "log", step: "build", kind: "arr", text: "deploying ./dist to Cloudflare Pages" });
+    await send({ event: "log", step: "build", kind: "arr", text: "deploying generated site to Railway" });
 
-    const preview = await deployPagesSite(workDir, project);
-    await send({ event: "data", step: "build", patch: { url: preview } });
-    await send({ event: "log", step: "build", kind: "ok", text: `live · ${preview}` });
+    const deployment = await deployRailwaySite(appDir, project);
+    await send({ event: "data", step: "build", patch: { url: deployment.url } });
+    await send({ event: "log", step: "build", kind: "ok", text: `live · ${deployment.url}` });
     await send({ event: "progress", step: "build", n: 5 });
     await send({ event: "complete", step: "build" });
 
@@ -66,11 +58,11 @@ async function main(): Promise<void> {
       ok: true,
       tool: "nic",
       command: "build",
-      data: { url: preview, project },
+      data: { url: deployment.url, project: deployment.project, service: deployment.service },
       error: null,
       meta: {
         product_count: site.jerseys.length,
-        host: "cloudflare-pages",
+        host: "railway",
         generated_at: new Date().toISOString(),
       },
     };
@@ -90,43 +82,113 @@ async function emit(
   await postSigned(brief.callback_url, secret, envelope);
 }
 
-async function writeSite(distDir: string, site: ReturnType<typeof buildStorefront>): Promise<void> {
-  await mkdir(distDir, { recursive: true });
-  await writeFile(path.join(distDir, "index.html"), site.html);
-  await writeFile(path.join(distDir, "styles.css"), site.css);
+async function writeRailwayApp(appDir: string, site: ReturnType<typeof buildStorefront>): Promise<void> {
+  const publicDir = path.join(appDir, "public");
+  await mkdir(publicDir, { recursive: true });
+  await writeFile(path.join(publicDir, "index.html"), site.html);
+  await writeFile(path.join(publicDir, "styles.css"), site.css);
+  await writeFile(
+    path.join(appDir, "package.json"),
+    `${JSON.stringify({ type: "module", engines: { node: "20.x" }, scripts: { start: "node server.js" } }, null, 2)}\n`,
+  );
+  await writeFile(
+    path.join(appDir, "server.js"),
+    `import { createReadStream, existsSync } from "node:fs";
+import { extname, join, normalize } from "node:path";
+import { createServer } from "node:http";
+
+const root = join(process.cwd(), "public");
+const types = new Map([
+  [".html", "text/html; charset=utf-8"],
+  [".css", "text/css; charset=utf-8"],
+]);
+
+createServer((req, res) => {
+  const pathname = new URL(req.url || "/", "http://localhost").pathname;
+  const safePath = normalize(pathname).replace(/^(\\.\\.[/\\\\])+/, "");
+  const filePath = join(root, safePath === "/" ? "index.html" : safePath);
+  const target = existsSync(filePath) ? filePath : join(root, "index.html");
+  res.setHeader("content-type", types.get(extname(target)) || "application/octet-stream");
+  createReadStream(target).pipe(res);
+}).listen(Number(process.env.PORT || 3000), "0.0.0.0");
+`,
+  );
 }
 
-async function ensurePagesProject(cwd: string, project: string): Promise<boolean> {
+async function deployRailwaySite(cwd: string, project: string): Promise<{ url: string; project: string; service?: string }> {
+  const configuredProject = optionalEnv(["RAILWAY_PROJECT_ID", "GENERATED_SITE_HOST_PROJECT_ID"]);
+  const configuredService = optionalEnv(["RAILWAY_SERVICE_ID", "RAILWAY_SERVICE_NAME", "GENERATED_SITE_HOST_SERVICE_ID"]);
+  const configuredEnvironment = optionalEnv(["RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_ID", "GENERATED_SITE_HOST_ENVIRONMENT_ID"]);
+
+  if (!configuredProject && !process.env.RAILWAY_TOKEN) {
+    const initArgs = ["init", "--name", project, "--json"];
+    const workspace = optionalEnv(["RAILWAY_WORKSPACE", "RAILWAY_WORKSPACE_ID", "GENERATED_SITE_HOST_WORKSPACE_ID"]);
+    if (workspace) initArgs.push("--workspace", workspace);
+    await runRailway(initArgs, cwd);
+  }
+
+  const deployArgs = ["up", "--detach", "--json", "--yes", "--message", `custombasketball ${project}`];
+  if (configuredProject) deployArgs.push("--project", configuredProject);
+  if (configuredEnvironment) deployArgs.push("--environment", configuredEnvironment);
+  if (configuredService) deployArgs.push("--service", configuredService);
+  const deployOutput = await runRailway(deployArgs, cwd);
+
+  const service = configuredService || (await firstRailwayService(cwd));
+  const url =
+    findRailwayUrl(deployOutput) ||
+    (service ? await ensureRailwayDomain(cwd, service, configuredProject, configuredEnvironment) : null) ||
+    findRailwayUrl(await runRailway(["status", "--json"], cwd));
+
+  if (!url) throw new Error("Railway did not return or expose a public deployment URL");
+  if (await waitForLiveUrl(url)) return { url, project: configuredProject || project, service };
+
+  throw new Error(`Railway deployment did not become live within ${LIVE_TIMEOUT_MS / 1000}s`);
+}
+
+async function firstRailwayService(cwd: string): Promise<string | undefined> {
+  const output = await runRailway(["service", "list", "--json"], cwd);
+  const parsed = parseJsonPayloads(output);
+  const services = parsed.flatMap((entry) => {
+    if (Array.isArray(entry)) return entry;
+    if (entry && typeof entry === "object" && Array.isArray((entry as { services?: unknown[] }).services)) {
+      return (entry as { services: unknown[] }).services;
+    }
+    return [];
+  });
+  const service = services.find((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object");
+  const id = service?.id || service?.serviceId || service?.name;
+  return typeof id === "string" ? id : undefined;
+}
+
+async function ensureRailwayDomain(
+  cwd: string,
+  service: string,
+  project: string | undefined,
+  environment: string | undefined,
+): Promise<string | null> {
+  const args = ["domain", "--service", service, "--json"];
+  if (project) args.push("--project", project);
+  if (environment) args.push("--environment", environment);
   try {
-    await runWrangler(["pages", "project", "create", project, `--production-branch=${PAGES_BRANCH}`], cwd);
-    return true;
+    return findRailwayUrl(await runRailway(args, cwd));
   } catch (error) {
-    const message = commandErrorText(error);
-    if (/already exists|project.*exists|name.*taken/i.test(message)) return false;
-    throw error;
+    const existing = findRailwayUrl(commandErrorText(error));
+    if (existing) return existing;
+    return null;
   }
 }
 
-async function deployPagesSite(cwd: string, project: string): Promise<string> {
-  await runWrangler(["pages", "deploy", "./dist", `--project-name=${project}`, `--branch=${PAGES_BRANCH}`, "--commit-dirty=true"], cwd);
-
-  const deterministicUrl = `https://${project}.pages.dev`;
-  if (await waitForLiveUrl(deterministicUrl)) return deterministicUrl;
-
-  const fallback = await readPagesProjectUrl(project);
-  if (fallback && (await waitForLiveUrl(fallback))) return fallback;
-
-  throw new Error(`Cloudflare Pages deployment did not become live within ${LIVE_TIMEOUT_MS / 1000}s`);
-}
-
-async function runWrangler(args: string[], cwd: string): Promise<string> {
+async function runRailway(args: string[], cwd: string): Promise<string> {
   const env = {
     ...process.env,
     CI: "true",
-    CLOUDFLARE_API_TOKEN: requiredEnv("CLOUDFLARE_API_TOKEN"),
-    CLOUDFLARE_ACCOUNT_ID: requiredEnv("CLOUDFLARE_ACCOUNT_ID"),
+    RAILWAY_API_TOKEN: optionalEnv(["RAILWAY_API_TOKEN", "GENERATED_SITE_HOST_RAILWAY_API_TOKEN", "GENERATED_SITE_HOST_API_TOKEN"]),
+    RAILWAY_TOKEN: optionalEnv(["RAILWAY_TOKEN", "GENERATED_SITE_HOST_RAILWAY_TOKEN", "GENERATED_SITE_HOST_TOKEN"]),
   };
-  const result = await execFileAsync("wrangler", args, { cwd, env, maxBuffer: 1024 * 1024 * 10 });
+  if (!env.RAILWAY_API_TOKEN && !env.RAILWAY_TOKEN) {
+    throw new Error("RAILWAY_API_TOKEN or RAILWAY_TOKEN is required");
+  }
+  const result = await execFileAsync("railway", args, { cwd, env, maxBuffer: 1024 * 1024 * 10 });
   return `${result.stdout || ""}${result.stderr || ""}`;
 }
 
@@ -137,39 +199,78 @@ async function waitForLiveUrl(url: string): Promise<boolean> {
       const response = await fetch(url, { method: "GET", redirect: "follow" });
       if (response.status === 200) return true;
     } catch {
-      // Propagation often returns network errors briefly after a Pages upload.
+      // Railway domains can take a few seconds to route to the fresh deployment.
     }
     await delay(1500);
   }
   return false;
 }
 
-async function readPagesProjectUrl(project: string): Promise<string | null> {
-  const accountId = requiredEnv("CLOUDFLARE_ACCOUNT_ID");
-  const token = requiredEnv("CLOUDFLARE_API_TOKEN");
-  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${project}`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) return null;
-
-  const body = (await response.json()) as {
-    result?: {
-      subdomain?: string;
-      latest_deployment?: { url?: string };
-    };
-  };
-  const subdomain = body.result?.subdomain;
-  if (subdomain) return subdomain.startsWith("http") ? subdomain : `https://${subdomain}`;
-  return body.result?.latest_deployment?.url || null;
-}
-
-function pagesProjectName(jobId: string): string {
+function railwayProjectName(jobId: string): string {
   const base = `cb-${jobId.toLowerCase()}`.replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
   let name = base.slice(0, 58).replace(/^-+/, "").replace(/-+$/, "");
   if (!/^[a-z0-9]/.test(name)) name = `cb-${name}`;
   name = name.slice(0, 58).replace(/-+$/, "");
   if (!/[a-z0-9]$/.test(name)) name = `${name}0`.slice(0, 58);
   return name || "cb-site";
+}
+
+function findRailwayUrl(output: string): string | null {
+  const railwayDomain = output.match(/https:\/\/[a-z0-9-]+(?:\.up)?\.railway\.app|[a-z0-9-]+(?:\.up)?\.railway\.app/i);
+  if (railwayDomain) return railwayDomain[0].startsWith("http") ? railwayDomain[0] : `https://${railwayDomain[0]}`;
+
+  for (const payload of parseJsonPayloads(output)) {
+    const fromJson = findUrlInJson(payload);
+    if (fromJson) return fromJson;
+  }
+  return null;
+}
+
+function parseJsonPayloads(output: string): unknown[] {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as unknown];
+      } catch {
+        return [];
+      }
+    });
+}
+
+function findUrlInJson(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value.match(/^https:\/\/[a-z0-9-]+(?:\.up)?\.railway\.app$/i) || value.match(/^[a-z0-9-]+(?:\.up)?\.railway\.app$/i)
+      ? value.startsWith("http")
+        ? value
+        : `https://${value}`
+      : null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const url = findUrlInJson(item);
+      if (url) return url;
+    }
+    return null;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["url", "domain", "publicDomain", "serviceDomain"]) {
+      const url = findUrlInJson(record[key]);
+      if (url) return url;
+    }
+    for (const item of Object.values(record)) {
+      const url = findUrlInJson(item);
+      if (url) return url;
+    }
+  }
+  return null;
+}
+
+function optionalEnv(names: string[]): string | undefined {
+  return names.map((name) => process.env[name]).find(Boolean);
 }
 
 function commandErrorText(error: unknown): string {
