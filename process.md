@@ -27,7 +27,7 @@ build the app under `app/` (layout in §7).
   image) — check the Blaxel docs.
 - **Cloudflare Pages:** the non-interactive **direct-upload** flow with `wrangler`
   (`wrangler pages project create` / `wrangler pages deploy ./dist`) and the API-token
-  scopes it needs — check the Cloudflare Pages docs.
+  scope it needs — **Account → Cloudflare Pages: Edit** for the correct Account ID.
 - The 5 jerseys' demo content (names / designs / prices) is yours to invent — keep it
   plausible.
 
@@ -195,7 +195,8 @@ shared helper is enough. Note in comments where the real version differs.
   stays reachable after the run for Max to audit and the demo to show. Before returning,
   poll the URL until it serves 200 (so Max never audits a not-yet-live URL).
 - Emits `log` events through generate + deploy, a `data {url}` patch with the Pages URL,
-  then the final result `{ url }`.
+  then the final result `{ url }`. Generated sites do not auto-expire; for the POC,
+  keep them and delete Pages projects explicitly with the cleanup helper when archiving.
 
 ### Max — the SEO specialist
 - CLI `max audit --brief '{… url …}'`, running inside its **Blaxel** sandbox. Runs
@@ -215,13 +216,13 @@ shared helper is enough. Note in comments where the real version differs.
   `report` stage completing with `doneLabel: "Handed to Maestro"`, Maestro acknowledges.
   The POC does **not** execute the fixes (out of scope).
 
-> **Future — hosting is a router, not one vendor.** This POC hosts every generated site on
+> **Future — hosting is a router, not one vendor.** The POC hosts every generated site on
 > Cloudflare Pages because they're static. In production, Nic routes **by app type**:
-> **Cloudflare** for static and SSR/edge apps (Pages/Workers), **Railway** for apps that need
-> a persistent always-on server or an arbitrary container/Docker runtime. The job contract
-> doesn't change — Nic just returns a durable `url`; the host behind it is chosen per build.
-> (Out of scope for the POC; noted so the Daytona→Cloudflare swap reads as the first leg of
-> that router.)
+> **Cloudflare** for static and SSR/edge apps (Pages/Workers), **Railway** for apps that
+> need a persistent always-on server or an arbitrary container/Docker runtime. The job
+> contract doesn't change — Nic just returns a durable `url`; the host behind it is chosen
+> per build. (Out of scope for the POC; noted so this Daytona→Cloudflare swap is understood
+> as the first leg of that router.)
 
 ---
 
@@ -246,9 +247,10 @@ contract, the signed webhook round trip, and **Blaxel sandboxes** for the specia
 2. **Provision via Stripe Projects:** `stripe plugin install projects` → `projects init`
    → `projects add neon` → `projects add render` → `projects add blaxel` →
    `projects env --pull` (lands `DATABASE_URL`, Blaxel creds). **Cloudflare is not a Stripe
-   Projects vendor** — create a Cloudflare API token scoped **Pages: Edit**, note the
-   **Account ID**, and set `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` in Maestro's
-   Render env (Pages free tier — nothing to track in `stripe projects spend`).
+   Projects vendor** — create a Cloudflare API token scoped
+   **Account → Cloudflare Pages: Edit**, note the **Account ID**, and set
+   `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` in Maestro's Render env
+   (Pages free tier — nothing to track in `stripe projects spend`).
 3. **Maestro core + deploy:** Express + Neon (`jobs`, `results` + the state machine) +
    `POST /api/run`, `GET /api/events` (SSE), and the **signed webhook** `POST
    /api/jobs/:id/ingest`. **Deploy to Render** so the webhook has a public URL.

@@ -15,6 +15,8 @@ COPY --from=ghcr.io/blaxel-ai/sandbox:latest /sandbox-api /usr/local/bin/sandbox
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends chromium python3 ca-certificates fonts-liberation netcat-openbsd \
+  && npm install -g wrangler@4.50.0 \
+  && npm cache clean --force \
   && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production

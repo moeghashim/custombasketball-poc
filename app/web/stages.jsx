@@ -38,7 +38,7 @@ function StageBuild({ data, progress, started }) {
             <span className="tl"></span><span className="tl"></span><span className="tl"></span>
             {liveUrl
               ? <a className="br-url" href={liveUrl} target="_blank" rel="noreferrer">{liveUrl}</a>
-              : <span className="br-url">{data.url || 'Waiting for Daytona preview'}</span>}
+              : <span className="br-url">{data.url || 'Waiting for Cloudflare Pages URL'}</span>}
           </div>
           <div className="br-canvas">
             <div className={`wf wf-nav${p >= 1 ? ' on' : ''}`}>
@@ -88,7 +88,7 @@ function reportSummary(data) {
   const issues = kpis.find((k) => k.label === 'Issues found')?.value;
   const fixes = kpis.find((k) => k.label === 'Fixes proposed')?.value;
   if (typeof score !== 'number' || typeof issues !== 'number' || typeof fixes !== 'number') return '';
-  return `Max ran Lighthouse SEO on the Daytona preview, scored ${score}%, found ${issues} issue${issues === 1 ? '' : 's'}, and proposed ${fixes} fix${fixes === 1 ? '' : 'es'}.`;
+  return `Max ran Lighthouse SEO on the generated preview, scored ${score}%, found ${issues} issue${issues === 1 ? '' : 's'}, and proposed ${fixes} fix${fixes === 1 ? '' : 'es'}.`;
 }
 
 function StageReport({ data, progress, finished }) {

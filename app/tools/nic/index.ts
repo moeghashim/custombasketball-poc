@@ -1,13 +1,20 @@
-import { Daytona } from "@daytona/sdk";
+import { execFile } from "node:child_process";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import { setTimeout as delay } from "node:timers/promises";
 import { postSigned } from "../../shared/signing.js";
 import type { FlowEvent, JobRequest, ToolResult } from "../../shared/types.js";
 
 interface NicData {
   url: string;
-  sandbox_id?: string;
+  project?: string;
 }
 
-const PORT = 3000;
+const execFileAsync = promisify(execFile);
+const PAGES_BRANCH = "main";
+const LIVE_TIMEOUT_MS = 45_000;
 
 main().catch(async (error) => {
   console.error(error);
@@ -24,54 +31,53 @@ async function main(): Promise<void> {
   await send({ event: "log", step: "build", kind: "dim", text: "generating static storefront template" });
 
   const site = buildStorefront();
+  const project = pagesProjectName(brief.job_id);
+  const workDir = await mkdtemp(path.join(os.tmpdir(), `nic-${project}-`));
+  const distDir = path.join(workDir, "dist");
+
   await send({ event: "progress", step: "build", n: 1 });
   await send({ event: "log", step: "build", kind: "ok", text: "5 custom jerseys modeled" });
   await send({ event: "progress", step: "build", n: 2 });
-  await send({ event: "log", step: "build", kind: "dim", text: "writing responsive HTML/CSS bundle" });
+  await send({ event: "log", step: "build", kind: "dim", text: "writing responsive HTML/CSS bundle to ./dist" });
 
-  const daytona = new Daytona();
-  const sandbox = await (daytona as any).create({
-    language: "typescript",
-    name: `custombasketball-${brief.job_id.slice(0, 8)}`,
-    envVars: { NODE_ENV: "production" },
-    public: true,
-  });
+  try {
+    await writeSite(distDir, site);
+    await send({ event: "progress", step: "build", n: 3 });
+    await send({ event: "log", step: "build", kind: "arr", text: `creating Cloudflare Pages project ${project}` });
 
-  await send({ event: "progress", step: "build", n: 3 });
-  await send({ event: "log", step: "build", kind: "arr", text: "created Daytona sandbox" });
+    const created = await ensurePagesProject(workDir, project);
+    await send({
+      event: "log",
+      step: "build",
+      kind: created ? "ok" : "dim",
+      text: created ? "Cloudflare Pages project ready" : "Cloudflare Pages project already exists",
+    });
 
-  await uploadSite(sandbox, site);
-  await send({ event: "log", step: "build", kind: "ok", text: "uploaded storefront files" });
+    await send({ event: "progress", step: "build", n: 4 });
+    await send({ event: "log", step: "build", kind: "arr", text: "deploying ./dist to Cloudflare Pages" });
 
-  await sandbox.process.executeCommand(
-    `nohup python3 -m http.server ${PORT} --bind 0.0.0.0 > /tmp/custombasketball.log 2>&1 &`,
-    "workspace/custombasketball",
-    undefined,
-    10,
-  );
+    const preview = await deployPagesSite(workDir, project);
+    await send({ event: "data", step: "build", patch: { url: preview } });
+    await send({ event: "log", step: "build", kind: "ok", text: `live · ${preview}` });
+    await send({ event: "progress", step: "build", n: 5 });
+    await send({ event: "complete", step: "build" });
 
-  await send({ event: "progress", step: "build", n: 4 });
-  await send({ event: "log", step: "build", kind: "arr", text: "started static server on Daytona" });
-
-  const preview = await getPreviewUrl(sandbox, PORT);
-  await send({ event: "data", step: "build", patch: { url: preview } });
-  await send({ event: "log", step: "build", kind: "ok", text: `live · ${preview}` });
-  await send({ event: "progress", step: "build", n: 5 });
-  await send({ event: "complete", step: "build" });
-
-  const result: ToolResult<NicData> = {
-    ok: true,
-    tool: "nic",
-    command: "build",
-    data: { url: preview, sandbox_id: sandbox.id },
-    error: null,
-    meta: {
-      product_count: site.jerseys.length,
-      host: "daytona",
-      generated_at: new Date().toISOString(),
-    },
-  };
-  await emit(brief, secret, { result });
+    const result: ToolResult<NicData> = {
+      ok: true,
+      tool: "nic",
+      command: "build",
+      data: { url: preview, project },
+      error: null,
+      meta: {
+        product_count: site.jerseys.length,
+        host: "cloudflare-pages",
+        generated_at: new Date().toISOString(),
+      },
+    };
+    await emit(brief, secret, { result });
+  } finally {
+    await rm(workDir, { force: true, recursive: true }).catch(() => undefined);
+  }
 }
 
 async function emit(
@@ -84,21 +90,92 @@ async function emit(
   await postSigned(brief.callback_url, secret, envelope);
 }
 
-async function uploadSite(sandbox: any, site: ReturnType<typeof buildStorefront>): Promise<void> {
-  await sandbox.fs.createFolder("workspace/custombasketball", "755");
-  await sandbox.fs.uploadFile(Buffer.from(site.html), "workspace/custombasketball/index.html");
-  await sandbox.fs.uploadFile(Buffer.from(site.css), "workspace/custombasketball/styles.css");
+async function writeSite(distDir: string, site: ReturnType<typeof buildStorefront>): Promise<void> {
+  await mkdir(distDir, { recursive: true });
+  await writeFile(path.join(distDir, "index.html"), site.html);
+  await writeFile(path.join(distDir, "styles.css"), site.css);
 }
 
-async function getPreviewUrl(sandbox: any, port: number): Promise<string> {
-  if (typeof sandbox.getSignedPreviewUrl === "function") {
-    const signed = await sandbox.getSignedPreviewUrl(port, 24 * 60 * 60);
-    if (signed?.url) return signed.url;
+async function ensurePagesProject(cwd: string, project: string): Promise<boolean> {
+  try {
+    await runWrangler(["pages", "project", "create", project, `--production-branch=${PAGES_BRANCH}`], cwd);
+    return true;
+  } catch (error) {
+    const message = commandErrorText(error);
+    if (/already exists|project.*exists|name.*taken/i.test(message)) return false;
+    throw error;
   }
+}
 
-  const preview = await sandbox.getPreviewLink(port);
-  if (!preview?.url) throw new Error("Daytona did not return a preview URL");
-  return preview.url;
+async function deployPagesSite(cwd: string, project: string): Promise<string> {
+  await runWrangler(["pages", "deploy", "./dist", `--project-name=${project}`, `--branch=${PAGES_BRANCH}`, "--commit-dirty=true"], cwd);
+
+  const deterministicUrl = `https://${project}.pages.dev`;
+  if (await waitForLiveUrl(deterministicUrl)) return deterministicUrl;
+
+  const fallback = await readPagesProjectUrl(project);
+  if (fallback && (await waitForLiveUrl(fallback))) return fallback;
+
+  throw new Error(`Cloudflare Pages deployment did not become live within ${LIVE_TIMEOUT_MS / 1000}s`);
+}
+
+async function runWrangler(args: string[], cwd: string): Promise<string> {
+  const env = {
+    ...process.env,
+    CI: "true",
+    CLOUDFLARE_API_TOKEN: requiredEnv("CLOUDFLARE_API_TOKEN"),
+    CLOUDFLARE_ACCOUNT_ID: requiredEnv("CLOUDFLARE_ACCOUNT_ID"),
+  };
+  const result = await execFileAsync("wrangler", args, { cwd, env, maxBuffer: 1024 * 1024 * 10 });
+  return `${result.stdout || ""}${result.stderr || ""}`;
+}
+
+async function waitForLiveUrl(url: string): Promise<boolean> {
+  const deadline = Date.now() + LIVE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url, { method: "GET", redirect: "follow" });
+      if (response.status === 200) return true;
+    } catch {
+      // Propagation often returns network errors briefly after a Pages upload.
+    }
+    await delay(1500);
+  }
+  return false;
+}
+
+async function readPagesProjectUrl(project: string): Promise<string | null> {
+  const accountId = requiredEnv("CLOUDFLARE_ACCOUNT_ID");
+  const token = requiredEnv("CLOUDFLARE_API_TOKEN");
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${project}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) return null;
+
+  const body = (await response.json()) as {
+    result?: {
+      subdomain?: string;
+      latest_deployment?: { url?: string };
+    };
+  };
+  const subdomain = body.result?.subdomain;
+  if (subdomain) return subdomain.startsWith("http") ? subdomain : `https://${subdomain}`;
+  return body.result?.latest_deployment?.url || null;
+}
+
+function pagesProjectName(jobId: string): string {
+  const base = `cb-${jobId.toLowerCase()}`.replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
+  let name = base.slice(0, 58).replace(/^-+/, "").replace(/-+$/, "");
+  if (!/^[a-z0-9]/.test(name)) name = `cb-${name}`;
+  name = name.slice(0, 58).replace(/-+$/, "");
+  if (!/[a-z0-9]$/.test(name)) name = `${name}0`.slice(0, 58);
+  return name || "cb-site";
+}
+
+function commandErrorText(error: unknown): string {
+  if (!error || typeof error !== "object") return String(error);
+  const maybe = error as { message?: string; stdout?: string; stderr?: string };
+  return [maybe.message, maybe.stdout, maybe.stderr].filter(Boolean).join("\n");
 }
 
 function buildStorefront() {

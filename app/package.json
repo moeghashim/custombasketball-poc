@@ -13,15 +13,15 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run build:tools",
     "build:tools": "esbuild tools/nic/index.ts --bundle --packages=external --platform=node --target=node20 --format=esm --outfile=dist/tools/nic.js && esbuild tools/max/index.ts --bundle --packages=external --platform=node --target=node20 --format=esm --outfile=dist/tools/max.js",
+    "delete:pages": "tsx tools/nic/delete-pages-project.ts",
     "prepare:image": "npm run build:tools",
     "push:image": "npm run prepare:image && bl push"
   },
   "dependencies": {
     "@blaxel/core": "^0.2.90",
-    "@daytona/sdk": "^0.187.0",
     "chrome-launcher": "^1.2.1",
     "express": "^5.2.1",
-    "lighthouse": "^13.4.0",
+    "lighthouse": "12.8.2",
     "pg": "^8.21.0",
     "tsx": "^4.21.0"
   },
@@ -30,6 +30,7 @@
     "@types/node": "^20.19.25",
     "@types/pg": "^8.15.6",
     "esbuild": "^0.27.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wrangler": "4.50.0"
   }
 }

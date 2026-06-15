@@ -114,7 +114,7 @@ async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
     brief: {
       brand: "custombasketball",
       product_count: 5,
-      deployment: "daytona",
+      deployment: "cloudflare-pages",
     },
   });
   nic.input.callback_url = `${baseUrl}/api/jobs/${nic.id}/ingest`;
@@ -127,7 +127,7 @@ async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
   }
 
   const siteUrl = (nicDone.output.data as { url?: string }).url;
-  if (!siteUrl) throw new Error("Nic result did not include a Daytona URL");
+  if (!siteUrl) throw new Error("Nic result did not include a generated-site URL");
 
   await pauseForVisibleHandoff();
   broadcastFlow({ event: "activate", step: "report", run_id: runId });
@@ -192,9 +192,7 @@ async function dispatchJob(job: JobRecord): Promise<void> {
 
   const envPrefix = [
     `JOB_HMAC_SECRET=${shellQuote(job.hmac_secret)}`,
-    process.env.DAYTONA_API_KEY ? `DAYTONA_API_KEY=${shellQuote(process.env.DAYTONA_API_KEY)}` : "",
-    process.env.DAYTONA_API_URL ? `DAYTONA_API_URL=${shellQuote(process.env.DAYTONA_API_URL)}` : "",
-    process.env.DAYTONA_TARGET ? `DAYTONA_TARGET=${shellQuote(process.env.DAYTONA_TARGET)}` : "",
+    ...envForJob(job.agent),
   ]
     .filter(Boolean)
     .join(" ");
@@ -220,6 +218,14 @@ async function cleanupSandbox(job: JobRecord): Promise<void> {
 function commandFor(agent: AgentName, task: string, request: Record<string, unknown>): string {
   const binary = agent === "nic" ? "nic" : "max";
   return `${binary} ${task} --brief ${shellQuote(JSON.stringify(request))}`;
+}
+
+function envForJob(agent: AgentName): string[] {
+  if (agent !== "nic") return [];
+  return [
+    `CLOUDFLARE_API_TOKEN=${shellQuote(requiredEnv("CLOUDFLARE_API_TOKEN"))}`,
+    `CLOUDFLARE_ACCOUNT_ID=${shellQuote(requiredEnv("CLOUDFLARE_ACCOUNT_ID"))}`,
+  ];
 }
 
 function shellQuote(value: string): string {
