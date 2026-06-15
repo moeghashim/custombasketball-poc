@@ -222,6 +222,9 @@ shared helper is enough. Note in comments where the real version differs.
 - **Durable-orchestration extras** — keep the `jobs` state machine + `results`; skip the
   outbox/inbox, leases, retries, reconciliation sweep.
 - **agent-cli-kit** — CLIs use a minimal hand-rolled helper, not the full kit.
+- **Run-tracking UI / cost accounting** — none, no dashboard. Run history *is* the Neon
+  `jobs`/`results` tables (status, durations, errors, outputs — query them directly);
+  **spend is `stripe projects spend`** (by provider). Don't build either.
 
 What we **do** build (don't cut): the always-on Maestro, Postgres job state, the job
 contract, the signed webhook round trip, and **Blaxel sandboxes** for the specialists.
