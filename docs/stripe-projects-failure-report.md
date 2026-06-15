@@ -24,7 +24,7 @@ Observed: the Render catalog exposed paid `starter` pricing, but the `render/web
 
 Impact: the service remains on Render Free, which can spin down and delay one-button demos. This is the only open blocker for the "always-on Maestro" success criterion.
 
-Workaround: continued on Free for the POC.
+Workaround: continued on Free for the POC and added a GitHub Actions keep-warm workflow that pings `/health` every five minutes. This reduces cold-start risk for demos but does not replace a paid always-on Render instance.
 
 Requested fix: expose Render plan/instance configuration in the schema and return a validation error instead of a 500 when unsupported config is submitted.
 
