@@ -6,6 +6,8 @@ Project: `custombasketball-poc`
 
 Historical outcome before the generated-site host swaps: the POC worked after manual workarounds, except Render was still on a Free instance because paid plan selection through Stripe Projects failed. A verified run on June 15, 2026 created the generated preview `https://3000-hxuevv5eiaoqddxr.daytonaproxy01.net`, Max returned a Lighthouse SEO score of 82, and Maestro emitted the final ack with the generated summary.
 
+Current generated-site host direction: the codebase now targets Railway for generated-site hosting. Railway appears in the Stripe Projects catalog as `railway/hosting`, but the `generated-site-host` resource is still `needs_information`, and Stripe Projects has not emitted Railway credentials into `stripe projects env`.
+
 ## Issues
 
 ### Render env vars were not usable after provisioning
@@ -48,9 +50,22 @@ Workaround: changed Maestro normalization to drop that internal Daytona API URL 
 
 Requested fix: export a public Daytona API URL for cross-provider workloads, or clearly mark internal-only URLs so orchestrators do not pass them into external workers.
 
+### Railway hosting resource could not be completed through Stripe Projects
+
+Observed: `stripe projects add railway/hosting --name generated-site-host --json --yes --accept-tos` created a Railway provider/resource, but returned `INFORMATION_REQUIRED` asking for `source_type`. The GitHub repository path then asked for repository and branch details, which does not match this POC's per-run generated-site artifact flow. The Docker image path failed with `Not logged in with a live mode account. Please run stripe login or set STRIPE_API_KEY.` `stripe projects env --refresh --json` did not return any Railway token or project env vars.
+
+Impact: Maestro and Nic can now deploy generated sites to Railway when a Railway token is configured, but Stripe Projects has not yet provided the credential needed for Render/Blaxel to run that path end to end.
+
+Workaround: configure a Railway token manually in Render as `RAILWAY_API_TOKEN` for account/workspace project creation, or `RAILWAY_TOKEN` plus optional `RAILWAY_PROJECT_ID`, `RAILWAY_SERVICE_ID`, and `RAILWAY_ENVIRONMENT_ID` for an existing Railway project/service.
+
+Requested fix: make `railway/hosting` provisioning support API-driven generated artifacts or clearly document the required source model; emit the created Railway credentials through `stripe projects env`; and make live-mode/payment requirements explicit before resource creation.
+
 ## References
 
 - Render Free web services spin down after 15 minutes of no inbound traffic and show a loading page while spinning up: https://render.com/docs/free#spinning-down-on-idle
 - Blaxel custom sandbox images require `sandbox-api` for process/file operations: https://docs.blaxel.ai/Sandboxes/Templates
 - Blaxel service-account API keys: https://docs.blaxel.ai/api-reference/service_accounts/create-service-account-api-key
 - Daytona SDK default API URL and env configuration: https://www.daytona.io/docs/en/configuration/
+- Railway CLI project token and account token environment variables: https://docs.railway.com/cli
+- Railway CLI `railway up` deployment flow: https://docs.railway.com/cli/deploying
+- Railway public domains: https://docs.railway.com/networking/public-networking
