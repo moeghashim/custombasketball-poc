@@ -2,7 +2,7 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createJob, getJob, migrate, updateJobStatus, waitForTerminalJob } from "./db.js";
+import { createJob, getJob, hasDatabaseConfig, migrate, updateJobStatus, waitForTerminalJob } from "./db.js";
 import { normalizeRuntimeEnv } from "./runtime-env.js";
 import { addSseClient, broadcastFlow } from "./sse.js";
 import { installWebhook } from "./webhook.js";
@@ -13,6 +13,9 @@ normalizeRuntimeEnv();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
 const webRoot = path.join(appRoot, "web");
+
+let databaseReady = false;
+let databaseError: string | null = null;
 
 const app = express();
 
@@ -27,7 +30,16 @@ app.use(
 
 installWebhook(app);
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req, res) =>
+  res.json({
+    ok: true,
+    database: {
+      configured: hasDatabaseConfig(),
+      ready: databaseReady,
+      error: databaseError,
+    },
+  }),
+);
 
 app.get("/api/events", (req, res) => {
   const cleanup = addSseClient(res);
@@ -35,6 +47,14 @@ app.get("/api/events", (req, res) => {
 });
 
 app.post("/api/run", async (req, res) => {
+  if (!databaseReady) {
+    res.status(503).json({
+      ok: false,
+      error: databaseError || "Database is not ready; set DATABASE_URL or NEON_CONNECTION_STRING in Render.",
+    });
+    return;
+  }
+
   const runId = randomUUID();
   const baseUrl = publicBaseUrl(req);
   res.json({ ok: true, run_id: runId });
@@ -50,7 +70,16 @@ app.post("/api/run", async (req, res) => {
 app.use(express.static(webRoot));
 app.use((_req, res) => res.sendFile(path.join(webRoot, "index.html")));
 
-await migrate();
+migrate()
+  .then(() => {
+    databaseReady = true;
+    databaseError = null;
+  })
+  .catch((error) => {
+    databaseReady = false;
+    databaseError = error instanceof Error ? error.message : String(error);
+    console.error(`Database migration failed: ${databaseError}`);
+  });
 
 const port = Number(process.env.PORT || 3000);
 app.listen(port, () => {

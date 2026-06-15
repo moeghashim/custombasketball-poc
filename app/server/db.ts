@@ -8,18 +8,19 @@ const { Pool } = pg;
 normalizeRuntimeEnv();
 
 const databaseUrl = process.env.DATABASE_URL;
+const pool = databaseUrl
+  ? new Pool({
+      connectionString: databaseUrl,
+      ssl: databaseUrl.includes("localhost") ? false : { rejectUnauthorized: false },
+    })
+  : null;
 
-if (!databaseUrl) {
-  console.warn("DATABASE_URL or NEON_CONNECTION_STRING is not set; Maestro will fail until Neon credentials are pulled.");
+export function hasDatabaseConfig(): boolean {
+  return Boolean(databaseUrl);
 }
 
-export const pool = new Pool({
-  connectionString: databaseUrl,
-  ssl: databaseUrl?.includes("localhost") ? false : { rejectUnauthorized: false },
-});
-
 export async function migrate(): Promise<void> {
-  await pool.query(`
+  await requiredPool().query(`
     create table if not exists jobs (
       id text primary key,
       run_id text not null,
@@ -39,7 +40,7 @@ export async function migrate(): Promise<void> {
     )
   `);
 
-  await pool.query(`
+  await requiredPool().query(`
     create table if not exists results (
       id bigserial primary key,
       job_id text not null references jobs(id) on delete cascade,
@@ -49,8 +50,8 @@ export async function migrate(): Promise<void> {
     )
   `);
 
-  await pool.query(`create index if not exists jobs_run_id_idx on jobs(run_id, created_at)`);
-  await pool.query(`create index if not exists results_job_id_idx on results(job_id, created_at)`);
+  await requiredPool().query(`create index if not exists jobs_run_id_idx on jobs(run_id, created_at)`);
+  await requiredPool().query(`create index if not exists results_job_id_idx on results(job_id, created_at)`);
 }
 
 function mapJob(row: pg.QueryResultRow): JobRecord {
@@ -89,7 +90,7 @@ export async function createJob(params: {
     issued_at: new Date().toISOString(),
   };
 
-  const result = await pool.query(
+  const result = await requiredPool().query(
     `insert into jobs (id, run_id, agent, task, status, hmac_secret, input)
      values ($1, $2, $3, $4, 'queued', $5, $6)
      returning *`,
@@ -99,7 +100,7 @@ export async function createJob(params: {
 }
 
 export async function getJob(id: string): Promise<JobRecord | null> {
-  const result = await pool.query(`select * from jobs where id = $1`, [id]);
+  const result = await requiredPool().query(`select * from jobs where id = $1`, [id]);
   return result.rows[0] ? mapJob(result.rows[0]) : null;
 }
 
@@ -108,7 +109,7 @@ export async function updateJobStatus(
   status: JobStatus,
   patch: { sandboxName?: string; output?: ToolResult; error?: string | null } = {},
 ): Promise<JobRecord> {
-  const result = await pool.query(
+  const result = await requiredPool().query(
     `update jobs
      set status = $2,
          sandbox_name = coalesce($3, sandbox_name),
@@ -126,7 +127,7 @@ export async function updateJobStatus(
 }
 
 export async function insertResult(jobId: string, kind: "event" | "result", payload: unknown): Promise<void> {
-  await pool.query(`insert into results (job_id, kind, payload) values ($1, $2, $3)`, [jobId, kind, payload]);
+  await requiredPool().query(`insert into results (job_id, kind, payload) values ($1, $2, $3)`, [jobId, kind, payload]);
 }
 
 export async function waitForTerminalJob(jobId: string, timeoutMs = 10 * 60 * 1000): Promise<JobRecord> {
@@ -138,4 +139,11 @@ export async function waitForTerminalJob(jobId: string, timeoutMs = 10 * 60 * 10
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
   return updateJobStatus(jobId, "timed_out", { error: "Timed out waiting for signed result" });
+}
+
+function requiredPool(): pg.Pool {
+  if (!pool) {
+    throw new Error("DATABASE_URL or NEON_CONNECTION_STRING is required for durable job state");
+  }
+  return pool;
 }
