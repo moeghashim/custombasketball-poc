@@ -15,13 +15,10 @@ This POC lives in its **own repo**, separate from the tenwhy design-doc site. Yo
 it now: `process.md` (this file) + `design/` (the Claude Design bundle — read-only); you
 build the app under `app/` (layout in §7).
 
-- A local git repo is already initialized with this plan + the design bundle. **Create
-  the GitHub remote and push**, then commit as you go:
-  ```
-  gh repo create custombasketball-poc --private --source=. --remote=origin --push
-  ```
-  Rename the repo if you prefer. If `gh` isn't authenticated, ask the user to create the
-  remote. **Do not** add this POC to the tenwhy repo.
+- This repo is already on GitHub (private):
+  **`github.com/moeghashim/custombasketball-poc`**. You're working in a clone of it — if
+  you don't have it yet, `git clone https://github.com/moeghashim/custombasketball-poc.git`.
+  **Commit and push as you go.** **Do not** add this POC to the tenwhy repo.
 
 ### Before you build — verify (don't guess)
 - `stripe projects catalog render · neon · blaxel · daytona` — confirm the exact service
