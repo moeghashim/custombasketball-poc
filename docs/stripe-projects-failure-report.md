@@ -50,6 +50,7 @@ Requested fix: export a public Daytona API URL for cross-provider workloads, or 
 
 ## References
 
+- Render Free web services spin down after 15 minutes of no inbound traffic and show a loading page while spinning up: https://render.com/docs/free#spinning-down-on-idle
 - Blaxel custom sandbox images require `sandbox-api` for process/file operations: https://docs.blaxel.ai/Sandboxes/Templates
 - Blaxel service-account API keys: https://docs.blaxel.ai/api-reference/service_accounts/create-service-account-api-key
 - Daytona SDK default API URL and env configuration: https://www.daytona.io/docs/en/configuration/
