@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>custombasketball POC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="application/json" id="flow-data">
+  {
+    "title": "Create custombasketball",
+    "kicker": "MAESTRO / LIVE",
+    "actionLabel": "Create the website",
+    "mode": "live",
+    "steps": [
+      {
+        "id": "build",
+        "type": "build",
+        "title": "Designing & building the website",
+        "sub": "Nic generates the storefront and deploys to Daytona",
+        "working": "Building & deploying",
+        "data": { "url": "Waiting for Daytona preview", "logs": [] }
+      },
+      {
+        "id": "report",
+        "type": "report",
+        "title": "Auditing & handing off SEO",
+        "sub": "Max runs Lighthouse and sends suggestions to Maestro",
+        "working": "Auditing live URL",
+        "data": {
+          "eyebrow": "Lighthouse SEO audit",
+          "heading": "Waiting for Max",
+          "meta": ["No run started"],
+          "doneLabel": "Handed to Maestro",
+          "kpis": [
+            { "value": 0, "suffix": "%", "label": "SEO score" },
+            { "value": 0, "label": "Issues found" },
+            { "value": 0, "label": "Fixes proposed" }
+          ],
+          "chart": [12, 12, 12, 12, 12, 12]
+        }
+      }
+    ]
+  }
+  </script>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+  <script type="text/babel" src="flow.jsx"></script>
+  <script type="text/babel" src="stages.jsx"></script>
+  <script type="text/babel">
+    window.FLOW = JSON.parse(document.getElementById('flow-data').textContent);
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    const controller = window.flowController = createFlowController(window.FLOW);
+
+    function applyFlowEvent(payload) {
+      if (!payload || !payload.event) return;
+      const step = payload.step || 'system';
+      if (payload.event === 'activate') controller.activate(step);
+      if (payload.event === 'log') controller.pushLog(step, { kind: payload.kind || '', text: payload.text || '' });
+      if (payload.event === 'data') controller.mergeData(step, payload.patch || {});
+      if (payload.event === 'progress') controller.progress(step, payload.n || 0);
+      if (payload.event === 'complete') controller.complete(step);
+      if (payload.event === 'ack') controller.mergeData(step, { meta: ['Maestro acknowledged', 'Would execute after approval'] });
+      if (payload.event === 'error') controller.pushLog('build', { kind: 'dim', text: payload.text || 'Run failed' });
+    }
+
+    let source = null;
+    async function startRun() {
+      controller.reset();
+      if (source) source.close();
+      source = new EventSource('/api/events');
+      source.addEventListener('flow', (message) => applyFlowEvent(JSON.parse(message.data)));
+      source.onerror = () => controller.mergeData('report', { meta: ['SSE connection interrupted'] });
+      const response = await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' } });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Unable to start run');
+      }
+    }
+
+    window.renderFlow = () => root.render(<AgentFlow flow={window.FLOW} controller={controller} onRun={startRun} />);
+    window.renderFlow();
+  </script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "name": "custombasketball-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "20.x",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "dev": "tsx watch server/maestro.ts",
+    "start": "tsx server/maestro.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run build:tools",
+    "build:tools": "esbuild tools/nic/index.ts --bundle --platform=node --target=node20 --format=esm --banner:js='#!/usr/bin/env node' --outfile=dist/tools/nic.js && esbuild tools/max/index.ts --bundle --platform=node --target=node20 --format=esm --banner:js='#!/usr/bin/env node' --outfile=dist/tools/max.js",
+    "prepare:image": "npm run build:tools && chmod +x dist/tools/nic.js dist/tools/max.js",
+    "push:image": "npm run prepare:image && bl push"
+  },
+  "dependencies": {
+    "@blaxel/core": "^0.2.90",
+    "@daytona/sdk": "^0.187.0",
+    "chrome-launcher": "^1.2.1",
+    "express": "^5.2.1",
+    "lighthouse": "^13.4.0",
+    "pg": "^8.21.0",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.19.25",
+    "@types/pg": "^8.15.6",
+    "esbuild": "^0.27.1",
+    "typescript": "^5.9.3"
+  }
+}
