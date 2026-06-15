@@ -119,24 +119,30 @@ async function deployRailwaySite(cwd: string, project: string): Promise<{ url: s
   const configuredProject = optionalEnv(["RAILWAY_PROJECT_ID", "GENERATED_SITE_HOST_PROJECT_ID"]);
   const configuredService = optionalEnv(["RAILWAY_SERVICE_ID", "RAILWAY_SERVICE_NAME", "GENERATED_SITE_HOST_SERVICE_ID"]);
   const configuredEnvironment = optionalEnv(["RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_ID", "GENERATED_SITE_HOST_ENVIRONMENT_ID"]);
+  let createdService: string | undefined;
 
   if (!configuredProject && !process.env.RAILWAY_TOKEN) {
     const initArgs = ["init", "--name", project, "--json"];
     const workspace = optionalEnv(["RAILWAY_WORKSPACE", "RAILWAY_WORKSPACE_ID", "GENERATED_SITE_HOST_WORKSPACE_ID"]);
     if (workspace) initArgs.push("--workspace", workspace);
     await runRailway(initArgs, cwd);
+    await runRailway(["add", "--service", project, "--json"], cwd);
+    createdService = project;
   }
 
   const deployArgs = ["up", "--detach", "--json", "--yes", "--message", `custombasketball ${project}`];
+  const deployService = configuredService || createdService;
   if (configuredProject) deployArgs.push("--project", configuredProject);
   if (configuredEnvironment) deployArgs.push("--environment", configuredEnvironment);
-  if (configuredService) deployArgs.push("--service", configuredService);
+  if (deployService) deployArgs.push("--service", deployService);
   const deployOutput = await runRailway(deployArgs, cwd);
 
-  const service = configuredService || (await firstRailwayService(cwd));
+  const service = deployService || (await firstRailwayService(cwd));
   const url =
     findRailwayUrl(deployOutput) ||
+    (await ensureRailwayDomain(cwd, undefined, configuredProject, configuredEnvironment)) ||
     (service ? await ensureRailwayDomain(cwd, service, configuredProject, configuredEnvironment) : null) ||
+    (service !== project ? await ensureRailwayDomain(cwd, project, configuredProject, configuredEnvironment) : null) ||
     findRailwayUrl(await runRailway(["status", "--json"], cwd));
 
   if (!url) throw new Error("Railway did not return or expose a public deployment URL");
@@ -162,11 +168,12 @@ async function firstRailwayService(cwd: string): Promise<string | undefined> {
 
 async function ensureRailwayDomain(
   cwd: string,
-  service: string,
+  service: string | undefined,
   project: string | undefined,
   environment: string | undefined,
 ): Promise<string | null> {
-  const args = ["domain", "--service", service, "--json"];
+  const args = ["domain", "--json"];
+  if (service) args.push("--service", service);
   if (project) args.push("--project", project);
   if (environment) args.push("--environment", environment);
   try {
@@ -207,12 +214,8 @@ async function waitForLiveUrl(url: string): Promise<boolean> {
 }
 
 function railwayProjectName(jobId: string): string {
-  const base = `cb-${jobId.toLowerCase()}`.replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
-  let name = base.slice(0, 58).replace(/^-+/, "").replace(/-+$/, "");
-  if (!/^[a-z0-9]/.test(name)) name = `cb-${name}`;
-  name = name.slice(0, 58).replace(/-+$/, "");
-  if (!/[a-z0-9]$/.test(name)) name = `${name}0`.slice(0, 58);
-  return name || "cb-site";
+  const suffix = jobId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
+  return suffix ? `cb${suffix}` : "cbsite";
 }
 
 function findRailwayUrl(output: string): string | null {
