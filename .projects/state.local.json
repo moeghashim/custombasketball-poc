@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "project": {
+    "initializedAt": "2026-06-15T02:41:53.842Z",
+    "merchantDisplayName": null,
+    "merchantId": "acct_1TJah50q5LIoKwph",
+    "projectId": "project_61UroQbCN2VeRO3G616USyeR0wSQFQxSjdH6rCSY47Pk",
+    "projectName": "custombasketball-poc"
+  },
+  "providers": {
+    "blaxel": {
+      "accountRequestId": "facctrq_61UroRh1lqOqLh5pC16USyeR0wSQFQxSjdH6rCSY4DWC",
+      "configuration": {},
+      "linkedAt": "2026-06-15T02:43:13.957Z",
+      "providerId": "prvdr_61UnoL4ZPCBLxqCQW5WJU",
+      "providerName": "Blaxel",
+      "redirectUrl": null,
+      "requestedAt": "2026-06-15T02:43:13.956Z",
+      "status": "complete"
+    },
+    "neon": {
+      "accountRequestId": "fprvcnn_61UmyisYQME14BkSK16USyeR0wSQFQxSjdH6rCSY4MSW",
+      "configuration": {},
+      "linkedAt": "2026-06-01T18:40:46.356Z",
+      "providerId": "prvdr_61UH8uNXFdoJUJOtT54AC",
+      "providerName": "Neon",
+      "redirectUrl": null,
+      "requestedAt": "2026-06-01T18:40:46.356Z",
+      "status": "complete"
+    }
+  },
+  "resources": {
+    "maestro-db": {
+      "configuration": {},
+      "createdAt": "2026-06-15T02:42:48.989Z",
+      "lastRevealedAt": "2026-06-15T02:42:49.426Z",
+      "lastStatus": "complete",
+      "name": "maestro-db",
+      "providerId": "prvdr_61UH8uNXFdoJUJOtT54AC",
+      "providerName": "Neon",
+      "resourceId": "fres_61UroRUTYhUCnfASq16USyeR0wSQFQxSjdH6rCSY4HMO",
+      "serviceId": "postgres"
+    }
+  }
+}

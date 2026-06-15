@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "providers": {
+    "blaxel": {
+      "name": "Blaxel"
+    },
+    "neon": {
+      "name": "Neon"
+    }
+  },
+  "resources": {
+    "maestro-db": {
+      "name": "maestro-db",
+      "providerName": "Neon",
+      "serviceId": "postgres"
+    }
+  }
+}
