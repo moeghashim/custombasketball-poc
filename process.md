@@ -38,8 +38,9 @@ One page, one button — **"Create the website"**. Click it and **Maestro** (a r
 always-on orchestrator) runs two specialists in sequence, each **in its own sandbox**,
 with the page narrating it all **live**:
 
-1. **Nic** (website builder) → uses **Kimi K2.7 Code** to build **`custombasketball`**
-   with **5 custom jerseys**, deploys it to **Railway**, returns a durable live URL.
+1. **Nic** (website builder) → uses **Kimi K2.7 Code** to generate the
+   **`custombasketball`** content/design spec with **5 custom jerseys**, renders the
+   static store, deploys it to **Railway**, returns a durable live URL.
 2. **Max** (SEO) → audits that live site with Lighthouse, uses **Kimi K2.7 Code** to
    produce suggested SEO/code changes, hands them back to Maestro.
 3. **Maestro** → uses **OpenAI `gpt-5.5` with high reasoning** to evaluate Max's proposal
@@ -187,8 +188,9 @@ shared helper is enough. Note in comments where the real version differs.
 
 ### Nic — the website builder
 - CLI `nic build`, running inside its **Blaxel** sandbox. Uses **Kimi K2.7 Code** to
-  generate **`custombasketball`** — a static store with **5 custom jerseys**. Nic validates
-  the returned HTML/CSS JSON before deployment.
+  generate the **`custombasketball`** content/design spec — including **5 custom jerseys**.
+  Nic validates that structured model output, renders the static HTML/CSS bundle, then
+  deploys it.
 - **Deploys the generated site to Railway** via the `railway` CLI installed in the shared
   Blaxel image. Nic packages the static files with a tiny Node 20 static server, creates
   or targets a Railway hosting service, uploads it with `railway up`, generates or reads
@@ -256,9 +258,10 @@ contract, the signed webhook round trip, and **Blaxel sandboxes** for the specia
    /api/jobs/:id/ingest`. **Deploy to Render** so the webhook has a public URL.
 4. **Recreate the Process Steps page** in live mode; drive its controller from the SSE
    stream (prove it with fake events first).
-5. **The `nic build` CLI:** use Kimi K2.7 Code to generate `custombasketball` (5 jerseys)
-   → deploy the generated app to Railway (`railway up`, durable Railway domain) → POST
-   `log`/`data`/`complete` events + final `{ url }` to the callback.
+5. **The `nic build` CLI:** use Kimi K2.7 Code to generate the `custombasketball`
+   content/design spec (5 jerseys) → render and deploy the generated app to Railway
+   (`railway up`, durable Railway domain) → POST `log`/`data`/`complete` events + final
+   `{ url }` to the callback.
 6. **The `max audit` CLI:** Lighthouse the Railway URL → use Kimi K2.7 Code to produce an
    SEO proposal → POST `report`-stage events + final `{ findings, suggestions, proposal }`.
 7. **Maestro evaluation:** use OpenAI `gpt-5.5` with high reasoning to evaluate Max's
@@ -296,7 +299,7 @@ Build exactly this; don't substitute.
 | Language · runtime · pkg-mgr | **TypeScript** · **Node 20** · **`tsx`** · **npm**. |
 | Maestro service | **Express** + **SSE** (`/api/run`, `/api/events`) + a **signed webhook** (`/api/jobs/:id/ingest`). **Deployed to Render** via Stripe Projects (public URL — sandboxes post straight to it, no tunnel). |
 | The page | **The design, recreated as-is** — React + Babel from CDN, no build step; live mode. |
-| Nic | CLI `nic build` (in a Blaxel sandbox); **Kimi K2.7 Code** generates `custombasketball` (5 jerseys); deploys the site to **Railway**. |
+| Nic | CLI `nic build` (in a Blaxel sandbox); **Kimi K2.7 Code** generates the `custombasketball` content/design spec (5 jerseys); Nic renders/deploys the site to **Railway**. |
 | Max | CLI `max audit` (in a Chrome-capable Blaxel sandbox); **Lighthouse + Kimi K2.7 Code** → constrained SEO proposal. |
 | Maestro evaluation | **OpenAI `gpt-5.5` with `reasoning.effort=high`** evaluates Max's returned proposal before ack. |
 | Job contract | Request `{ job_id, agent, task, brief, callback_url }` + HMAC secret → **HMAC-signed** events + final `{ok,data,error,meta}` to Maestro's webhook. |
