@@ -4,9 +4,9 @@ Report date: June 15, 2026
 
 Project: `custombasketball-poc`
 
-Historical outcome before the generated-site host swaps: the POC worked after manual workarounds, except Render was still on a Free instance because paid plan selection through Stripe Projects failed. A verified run on June 15, 2026 created the generated preview `https://3000-hxuevv5eiaoqddxr.daytonaproxy01.net`, Max returned a Lighthouse SEO score of 82, and Maestro emitted the final ack with the generated summary.
+Current verified outcome: the POC works end to end after manual workarounds, except Render is still on a Free instance because paid plan selection through Stripe Projects failed. A verified run on June 15, 2026 (`d250a041-0349-4bb7-9008-0c519667505c`) created the generated Railway preview `https://cb26940d39b899-production.up.railway.app`, Max returned a Lighthouse SEO score of 92, and Maestro evaluated Max's Kimi proposal with OpenAI `gpt-5.5` high reasoning.
 
-Current generated-site host direction: the codebase now targets Railway for generated-site hosting. Railway appears in the Stripe Projects catalog as `railway/hosting`, but the `generated-site-host` resource is still `needs_information`, and Stripe Projects has not emitted Railway credentials into `stripe projects env`.
+Current generated-site host direction: the codebase targets Railway for generated-site hosting. Railway appears in the Stripe Projects catalog as `railway/hosting`, but the `generated-site-host` resource is still `needs_information`, and Stripe Projects has not emitted Railway credentials into `stripe projects env`. The verified run used a manually configured Render `RAILWAY_API_TOKEN`.
 
 ## Issues
 
@@ -54,7 +54,7 @@ Requested fix: export a public Daytona API URL for cross-provider workloads, or 
 
 Observed: `stripe projects add railway/hosting --name generated-site-host --json --yes --accept-tos` created a Railway provider/resource, but returned `INFORMATION_REQUIRED` asking for `source_type`. The GitHub repository path then asked for repository and branch details, which does not match this POC's per-run generated-site artifact flow. The Docker image path failed with `Not logged in with a live mode account. Please run stripe login or set STRIPE_API_KEY.` `stripe projects env --refresh --json` did not return any Railway token or project env vars.
 
-Impact: Maestro and Nic can now deploy generated sites to Railway when a Railway token is configured, but Stripe Projects has not yet provided the credential needed for Render/Blaxel to run that path end to end.
+Impact: Maestro and Nic can deploy generated sites to Railway when a Railway token is configured manually, but Stripe Projects has not yet provided the credential needed for Render/Blaxel to run that path end to end without manual setup.
 
 Workaround: configure a Railway token manually in Render as `RAILWAY_API_TOKEN` for account/workspace project creation, or `RAILWAY_TOKEN` plus optional `RAILWAY_PROJECT_ID`, `RAILWAY_SERVICE_ID`, and `RAILWAY_ENVIRONMENT_ID` for an existing Railway project/service.
 
