@@ -4,7 +4,7 @@ Report date: June 15, 2026
 
 Project: `custombasketball-poc`
 
-Outcome: the POC is now working after manual workarounds. Successful run `fe59e90d-9ba7-418c-b996-d0ef1d0826a0` created the Daytona preview `https://3000-tfug9kroymxuhfut.daytonaproxy01.net`, Max returned a Lighthouse SEO score of 82, and Maestro emitted the final ack.
+Outcome: the POC works after manual workarounds, except Render is still on a Free instance because paid plan selection through Stripe Projects failed. Latest verified run on June 15, 2026 created the Daytona preview `https://3000-hxuevv5eiaoqddxr.daytonaproxy01.net`, Max returned a Lighthouse SEO score of 82, and Maestro emitted the final ack with the generated summary.
 
 ## Issues
 
@@ -22,7 +22,7 @@ Requested fix: Stripe Projects should either inject linked resource env vars int
 
 Observed: the Render catalog exposed paid `starter` pricing, but the `render/web-service` config schema did not accept `instance_type`. A full config update with `instance_type: starter` returned a Stripe API 500 (`req_v2xhb17Ls4iRcpo91`); a narrow update was rejected as invalid schema.
 
-Impact: the service remains on Render Free, which can spin down and delay one-button demos.
+Impact: the service remains on Render Free, which can spin down and delay one-button demos. This is the only open blocker for the "always-on Maestro" success criterion.
 
 Workaround: continued on Free for the POC.
 
