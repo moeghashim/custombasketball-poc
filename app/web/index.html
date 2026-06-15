@@ -67,14 +67,14 @@
       if (payload.event === 'log') controller.pushLog(step, { kind: payload.kind || '', text: payload.text || '' });
       if (payload.event === 'data') controller.mergeData(step, payload.patch || {});
       if (payload.event === 'progress') controller.progress(step, payload.n || 0);
-      if (payload.event === 'complete') controller.complete(step);
+      if (payload.event === 'complete') controller.complete(step, { advance: false });
       if (payload.event === 'ack') controller.mergeData(step, { meta: ['Maestro acknowledged', 'Would execute after approval'] });
       if (payload.event === 'error') controller.pushLog('build', { kind: 'dim', text: payload.text || 'Run failed' });
     }
 
     let source = null;
     async function startRun() {
-      controller.reset();
+      controller.requestStart();
       if (source) source.close();
       source = new EventSource('/api/events');
       source.addEventListener('flow', (message) => applyFlowEvent(JSON.parse(message.data)));

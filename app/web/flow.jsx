@@ -3,7 +3,7 @@ const { useState, useEffect } = React;
 function createFlowController(flow) {
   const listeners = new Set();
   const blank = () => flow.steps.map((s) => ({ data: JSON.parse(JSON.stringify(s.data || {})), progress: 0 }));
-  let state = { active: 0, done: 0, finished: false, steps: blank() };
+  let state = { active: -1, done: 0, finished: false, requested: false, steps: blank() };
   const emit = () => listeners.forEach((listener) => listener());
   const idxOf = (ref) => (typeof ref === 'number' ? ref : flow.steps.findIndex((s) => s.id === ref));
   const set = (patch) => { state = { ...state, ...patch }; emit(); };
@@ -18,8 +18,9 @@ function createFlowController(flow) {
   return {
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     getState() { return state; },
-    reset() { state = { active: 0, done: 0, finished: false, steps: blank() }; emit(); },
-    activate(ref) { const i = idxOf(ref); if (i >= 0) set({ active: i, finished: false }); },
+    reset() { state = { active: -1, done: 0, finished: false, requested: false, steps: blank() }; emit(); },
+    requestStart() { state = { active: -1, done: 0, finished: false, requested: true, steps: blank() }; emit(); },
+    activate(ref) { const i = idxOf(ref); if (i >= 0) set({ active: i, finished: false, requested: true }); },
     complete(ref, opts = {}) {
       const i = idxOf(ref);
       if (i < 0) return;
@@ -76,12 +77,21 @@ function StepRow({ index, step, status }) {
   );
 }
 
-function FlowView({ flow, active, done, finished, stageIndex, stageData, stageProgress, onRun }) {
+function FlowView({ flow, active, done, finished, requested, stageIndex, stageData, stageProgress, onRun }) {
   const steps = flow.steps;
   const cur = steps[stageIndex];
   const Stage = (window.STAGES || {})[cur.type] || (() => <div className="stage-pad">Unknown stage</div>);
-  const running = active < steps.length && (done > 0 || stageProgress > 0);
-  const statusOf = (i) => i < done ? 'done' : (i === active && !finished) ? 'active' : 'todo';
+  const running = requested && !finished;
+  const statusOf = (i) => i < done ? 'done' : (requested && i === active && !finished) ? 'active' : 'todo';
+  const statusText = !requested
+    ? <>Ready</>
+    : finished
+      ? <><b>Done</b> / {steps.length} of {steps.length} tasks complete</>
+      : done > 0 && active < done
+        ? <><b>Step {done}</b> complete / sharing URL</>
+        : active >= 0
+          ? <>Step <b>{Math.min(active + 1, steps.length)}</b> of {steps.length}</>
+          : <>Starting Maestro</>;
   return (
     <div className="card">
       <div className="top">
@@ -91,11 +101,7 @@ function FlowView({ flow, active, done, finished, stageIndex, stageData, stagePr
         </div>
         <div className="top-r">
           <ActionButton onClick={onRun} running={running} finished={finished} label={flow.actionLabel || 'Create the website'} />
-          <span className="status">
-            {finished
-              ? <><b>Done</b> / {steps.length} of {steps.length} tasks complete</>
-              : <>Step <b>{Math.min(active + 1, steps.length)}</b> of {steps.length}</>}
-          </span>
+          <span className="status">{statusText}</span>
         </div>
       </div>
       <div className="pbar"><div className="pbar-fill" style={{ width: `${(done / steps.length) * 100}%` }}></div></div>
@@ -105,7 +111,7 @@ function FlowView({ flow, active, done, finished, stageIndex, stageData, stagePr
         </div>
         <div className="stage">
           <div className="stage-root" key={stageIndex}>
-            <Stage data={stageData} progress={stageProgress} finished={finished} />
+            <Stage data={stageData} progress={stageProgress} finished={finished} started={requested} />
           </div>
         </div>
       </div>
@@ -117,13 +123,14 @@ function AgentFlow({ flow, controller, onRun }) {
   const [, force] = useState(0);
   useEffect(() => controller.subscribe(() => force((x) => x + 1)), [controller]);
   const state = controller.getState();
-  const stageIndex = Math.min(state.active, flow.steps.length - 1);
+  const stageIndex = state.active >= 0 ? Math.min(state.active, flow.steps.length - 1) : 0;
   return (
     <FlowView
       flow={flow}
       active={state.active}
       done={state.done}
       finished={state.finished}
+      requested={state.requested}
       stageIndex={stageIndex}
       stageData={state.steps[stageIndex].data || {}}
       stageProgress={state.steps[stageIndex].progress}

@@ -24,10 +24,11 @@ function CountNum({ value, decimals = 0, prefix = '', suffix = '' }) {
   return <>{prefix}{v.toFixed(decimals)}{suffix}</>;
 }
 
-function StageBuild({ data, progress }) {
+function StageBuild({ data, progress, started }) {
   const logs = data.logs || [];
   const p = progress || 0;
   const fin = p >= 5 || logs.some((line) => `${line.text}`.startsWith('live'));
+  const liveUrl = typeof data.url === 'string' && /^https?:\/\//.test(data.url) ? data.url : '';
   return (
     <div className="stage-pad">
       <div className="stage-cap"><span className="dot"></span>Designing &amp; building the site</div>
@@ -35,7 +36,9 @@ function StageBuild({ data, progress }) {
         <div className="browser">
           <div className="br-bar">
             <span className="tl"></span><span className="tl"></span><span className="tl"></span>
-            <span className="br-url">{data.url || 'Waiting for Daytona preview'}</span>
+            {liveUrl
+              ? <a className="br-url" href={liveUrl} target="_blank" rel="noreferrer">{liveUrl}</a>
+              : <span className="br-url">{data.url || 'Waiting for Daytona preview'}</span>}
           </div>
           <div className="br-canvas">
             <div className={`wf wf-nav${p >= 1 ? ' on' : ''}`}>
@@ -55,6 +58,12 @@ function StageBuild({ data, progress }) {
             <div className={`wf wf-foot${p >= 4 ? ' on' : ''}`}></div>
           </div>
         </div>
+        {liveUrl && (
+          <div className="share-url">
+            <span>Daytona preview</span>
+            <a href={liveUrl} target="_blank" rel="noreferrer">{liveUrl}</a>
+          </div>
+        )}
         <div className="term">
           {logs.map((line, i) => (
             <div key={i} className="term-row on">
@@ -65,7 +74,7 @@ function StageBuild({ data, progress }) {
               {!['cmd','ok','arr','dim'].includes(line.kind) && <span>{line.text}</span>}
             </div>
           ))}
-          {!fin && <div className="term-row on"><span className="term-cursor"></span></div>}
+          {started && !fin && <div className="term-row on"><span className="term-cursor"></span></div>}
         </div>
       </div>
     </div>
@@ -103,6 +112,16 @@ function StageReport({ data, progress, finished }) {
             <div className="rp-lines">
               {[88, 96, 72].map((w, i) => <span key={i} className={`rp-ln${p >= 5 ? ' on' : ''}`} style={{ width: `${w}%` }}></span>)}
             </div>
+            {(data.summary || data.suggestions) && (
+              <div className={`rp-summary${p >= 5 || finished ? ' on' : ''}`}>
+                {data.summary && <p>{data.summary}</p>}
+                {Array.isArray(data.suggestions) && data.suggestions.length > 0 && (
+                  <ul>
+                    {data.suggestions.slice(0, 3).map((item, i) => <li key={i}>{item}</li>)}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
           <div className={`rp-badge${(p >= 5 || finished) ? ' on' : ''}`}><Check size={14} />{data.doneLabel || 'Handed to Maestro'}</div>
         </div>

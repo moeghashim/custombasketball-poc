@@ -67,8 +67,9 @@ app.post("/api/run", async (req, res) => {
   }, 250);
 });
 
-app.use(express.static(webRoot));
-app.use((_req, res) => res.sendFile(path.join(webRoot, "index.html")));
+app.get("/", (_req, res) => sendIndex(res));
+app.use(express.static(webRoot, { index: false }));
+app.use((_req, res) => sendIndex(res));
 
 migrate()
   .then(() => {
@@ -90,6 +91,11 @@ function publicBaseUrl(req: express.Request): string {
   const configured = process.env.MAESTRO_PUBLIC_URL || process.env.RENDER_EXTERNAL_URL;
   if (configured) return configured.replace(/\/$/, "");
   return `${req.protocol}://${req.get("host")}`;
+}
+
+function sendIndex(res: express.Response): void {
+  res.setHeader("cache-control", "no-store");
+  res.sendFile(path.join(webRoot, "index.html"));
 }
 
 async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
