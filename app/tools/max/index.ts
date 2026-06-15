@@ -1,5 +1,6 @@
 import * as chromeLauncher from "chrome-launcher";
 import lighthouse from "lighthouse";
+import { callKimiJson } from "../../shared/ai.js";
 import { postSigned } from "../../shared/signing.js";
 import type { FlowEvent, JobRequest, ToolResult } from "../../shared/types.js";
 
@@ -14,6 +15,22 @@ interface MaxData {
   seo_score: number;
   findings: Finding[];
   suggestions: string[];
+  proposal: SeoProposal;
+}
+
+interface SeoProposal {
+  summary: string;
+  suggestions: string[];
+  changes: SeoChange[];
+  risk: "low" | "medium" | "high";
+}
+
+interface SeoChange {
+  file: "public/index.html" | "public/styles.css" | "public/robots.txt";
+  operation: "replace" | "append" | "create";
+  target?: string;
+  value: string;
+  rationale: string;
 }
 
 main().catch((error) => {
@@ -55,8 +72,10 @@ async function main(): Promise<void> {
 
     const seoScore = Math.round((runner.lhr.categories.seo?.score ?? 0) * 100);
     const findings = collectFindings(runner.lhr.audits);
-    const suggestions = suggestionsFromFindings(findings);
-    const data: MaxData = { seo_score: seoScore, findings, suggestions };
+    await send({ event: "log", step: "report", kind: "arr", text: "Kimi K2.7 Code drafting SEO change proposal" });
+    const snapshot = await fetchSiteSnapshot(url);
+    const proposal = await proposeSeoChanges(url, seoScore, findings, snapshot);
+    const data: MaxData = { seo_score: seoScore, findings, suggestions: proposal.suggestions, proposal };
 
     await send({
       event: "data",
@@ -77,6 +96,7 @@ async function main(): Promise<void> {
       meta: {
         lighthouse_version: runner.lhr.lighthouseVersion,
         final_url: runner.lhr.finalDisplayedUrl || runner.lhr.finalUrl,
+        kimi_model: process.env.KIMI_MODEL || "kimi-k2.7-code",
         generated_at: new Date().toISOString(),
       },
     };
@@ -111,17 +131,74 @@ function collectFindings(audits: Record<string, any>): Finding[] {
     }));
 }
 
-function suggestionsFromFindings(findings: Finding[]): string[] {
-  if (!findings.length) return ["Keep metadata and structured content current as products change."];
-
-  return findings.slice(0, 5).map((finding) => {
-    if (finding.id.includes("meta-description")) return "Tighten the homepage meta description around custom basketball jerseys and team uniforms.";
-    if (finding.id.includes("document-title")) return "Keep the page title specific to custom basketball jerseys.";
-    if (finding.id.includes("crawlable")) return "Ensure all product cards and quote links are crawlable anchor elements.";
-    if (finding.id.includes("hreflang")) return "Add hreflang only if localized versions launch.";
-    if (finding.id.includes("canonical")) return "Add a canonical URL once the final production domain is selected.";
-    return `Address Lighthouse SEO audit: ${finding.title}.`;
+async function proposeSeoChanges(url: string, seoScore: number, findings: Finding[], html: string): Promise<SeoProposal> {
+  const response = await callKimiJson<SeoProposal>({
+    system:
+      "You are Max, an SEO/code specialist. Return only valid JSON. Propose safe, minimal changes for a static HTML/CSS website from Lighthouse SEO facts.",
+    user: JSON.stringify({
+      url,
+      seo_score: seoScore,
+      findings,
+      html: html.slice(0, 35_000),
+      allowed_files: ["public/index.html", "public/styles.css", "public/robots.txt"],
+      output_shape: {
+        summary: "short plain-English summary",
+        suggestions: ["specific suggested SEO improvements"],
+        changes: [
+          {
+            file: "public/index.html",
+            operation: "replace | append | create",
+            target: "exact existing text for replace, optional for append/create",
+            value: "replacement or content to add",
+            rationale: "why this improves SEO",
+          },
+        ],
+        risk: "low | medium | high",
+      },
+      rules: [
+        "Only suggest changes in allowed_files.",
+        "Prefer low-risk metadata, crawlability, canonical, structured data, robots.txt, and accessible content changes.",
+        "Do not propose JavaScript, external tracking, third-party assets, or server changes.",
+        "If Lighthouse found no failures, propose 1-2 optional low-risk improvements and set risk to low.",
+        "Return 1 to 5 suggestions and at most 5 changes.",
+      ],
+    }),
+    temperature: 0.2,
+    maxTokens: 5000,
   });
+  return validateProposal(response.data);
+}
+
+async function fetchSiteSnapshot(url: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Unable to fetch generated site for SEO proposal: ${response.status}`);
+  return response.text();
+}
+
+function validateProposal(proposal: SeoProposal): SeoProposal {
+  if (!proposal || typeof proposal !== "object") throw new Error("Kimi did not return an SEO proposal object");
+  const summary = typeof proposal.summary === "string" ? proposal.summary.trim() : "";
+  const suggestions = Array.isArray(proposal.suggestions)
+    ? proposal.suggestions.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, 5)
+    : [];
+  const changes = Array.isArray(proposal.changes) ? proposal.changes.filter(isSeoChange).slice(0, 5) : [];
+  const risk = proposal.risk === "medium" || proposal.risk === "high" ? proposal.risk : "low";
+
+  if (!summary) throw new Error("Kimi SEO proposal is missing a summary");
+  if (!suggestions.length) throw new Error("Kimi SEO proposal is missing suggestions");
+  return { summary, suggestions, changes, risk };
+}
+
+function isSeoChange(value: unknown): value is SeoChange {
+  if (!value || typeof value !== "object") return false;
+  const change = value as Partial<SeoChange>;
+  return (
+    (change.file === "public/index.html" || change.file === "public/styles.css" || change.file === "public/robots.txt") &&
+    (change.operation === "replace" || change.operation === "append" || change.operation === "create") &&
+    typeof change.value === "string" &&
+    typeof change.rationale === "string" &&
+    (change.target === undefined || typeof change.target === "string")
+  );
 }
 
 function reportData(url: string, data: MaxData): Record<string, unknown> {
@@ -130,7 +207,7 @@ function reportData(url: string, data: MaxData): Record<string, unknown> {
     eyebrow: "Lighthouse SEO audit",
     heading: "custombasketball — SEO handoff",
     meta: ["Generated by Max", new URL(url).hostname, `${issueCount} issues`],
-    summary: `Max ran Lighthouse SEO on the generated preview, scored ${data.seo_score}%, found ${issueCount} issue${issueCount === 1 ? "" : "s"}, and proposed ${data.suggestions.length} fix${data.suggestions.length === 1 ? "" : "es"}.`,
+    summary: `Max ran Lighthouse SEO and Kimi K2.7 Code on the generated preview, scored ${data.seo_score}%, found ${issueCount} issue${issueCount === 1 ? "" : "s"}, and proposed ${data.suggestions.length} fix${data.suggestions.length === 1 ? "" : "es"}.`,
     suggestions: data.suggestions,
     doneLabel: "Handed to Maestro",
     kpis: [

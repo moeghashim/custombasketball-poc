@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
+import { callKimiJson } from "../../shared/ai.js";
 import { postSigned } from "../../shared/signing.js";
 import type { FlowEvent, JobRequest, ToolResult } from "../../shared/types.js";
 
@@ -11,6 +12,25 @@ interface NicData {
   url: string;
   project?: string;
   service?: string;
+}
+
+interface SiteJersey {
+  name: string;
+  design: string;
+  price: number;
+}
+
+interface SiteBuild {
+  html: string;
+  css: string;
+  jerseys: SiteJersey[];
+  model: string;
+}
+
+interface KimiSiteResponse {
+  html: string;
+  css: string;
+  jerseys: SiteJersey[];
 }
 
 const execFileAsync = promisify(execFile);
@@ -28,15 +48,15 @@ async function main(): Promise<void> {
 
   await send({ event: "activate", step: "build" });
   await send({ event: "log", step: "build", kind: "cmd", text: "nic build --store custombasketball" });
-  await send({ event: "log", step: "build", kind: "dim", text: "generating static storefront template" });
+  await send({ event: "log", step: "build", kind: "dim", text: "asking Kimi K2.7 Code to generate the storefront" });
 
-  const site = buildStorefront();
+  const site = await buildStorefrontWithKimi(brief.brief);
   const project = railwayProjectName(brief.job_id);
   const workDir = await mkdtemp(path.join(os.tmpdir(), `nic-${project}-`));
   const appDir = path.join(workDir, "app");
 
   await send({ event: "progress", step: "build", n: 1 });
-  await send({ event: "log", step: "build", kind: "ok", text: "5 custom jerseys modeled" });
+  await send({ event: "log", step: "build", kind: "ok", text: `${site.jerseys.length} custom jerseys modeled by ${site.model}` });
   await send({ event: "progress", step: "build", n: 2 });
   await send({ event: "log", step: "build", kind: "dim", text: "writing responsive HTML/CSS bundle to Railway app" });
 
@@ -82,11 +102,12 @@ async function emit(
   await postSigned(brief.callback_url, secret, envelope);
 }
 
-async function writeRailwayApp(appDir: string, site: ReturnType<typeof buildStorefront>): Promise<void> {
+async function writeRailwayApp(appDir: string, site: SiteBuild): Promise<void> {
   const publicDir = path.join(appDir, "public");
   await mkdir(publicDir, { recursive: true });
   await writeFile(path.join(publicDir, "index.html"), site.html);
   await writeFile(path.join(publicDir, "styles.css"), site.css);
+  await writeFile(path.join(publicDir, "robots.txt"), "User-agent: *\nAllow: /\n");
   await writeFile(
     path.join(appDir, "package.json"),
     `${JSON.stringify({ type: "module", engines: { node: "20.x" }, scripts: { start: "node server.js" } }, null, 2)}\n`,
@@ -282,90 +303,64 @@ function commandErrorText(error: unknown): string {
   return [maybe.message, maybe.stdout, maybe.stderr].filter(Boolean).join("\n");
 }
 
-function buildStorefront() {
-  const jerseys = [
-    { name: "Downtown Fade", design: "Black-to-gold gradient with stitched skyline trim", price: 89 },
-    { name: "Ice Court", design: "White mesh body with powder blue side panels", price: 84 },
-    { name: "Sunset Drive", design: "Coral, navy, and cream throwback striping", price: 92 },
-    { name: "Rec League Pro", design: "Forest green base with cream varsity lettering", price: 79 },
-    { name: "Midnight Five", design: "Matte navy jersey with silver number kit", price: 95 },
-  ];
+async function buildStorefrontWithKimi(brief: Record<string, unknown>): Promise<SiteBuild> {
+  const response = await callKimiJson<KimiSiteResponse>({
+    system:
+      "You are Nic, a senior frontend builder. Return only valid JSON. Generate production-ready static HTML and CSS for a small ecommerce landing page.",
+    user: JSON.stringify({
+      task: "Generate a complete custombasketball website.",
+      brand: brief.brand || "custombasketball",
+      product_count: brief.product_count || 5,
+      requirements: [
+        "Exactly 5 custom basketball jersey products.",
+        "HTML must be a full document with doctype, html lang, title, meta description, viewport, semantic header/nav/main/sections, accessible links, and no script tags.",
+        "CSS must be separate and assume the HTML links to ./styles.css.",
+        "Use no external images, fonts, scripts, stylesheets, or network assets.",
+        "Make the design polished, responsive, and suitable for a team-uniform storefront.",
+        "Use real visible product names, descriptions, prices, and a clear quote CTA.",
+      ],
+      output_shape: {
+        html: "full HTML document string",
+        css: "complete CSS string",
+        jerseys: [{ name: "string", design: "string", price: 89 }],
+      },
+    }),
+    temperature: 0.45,
+    maxTokens: 9000,
+  });
 
-  const cards = jerseys
-    .map(
-      (jersey, index) => `
-        <article class="jersey-card">
-          <div class="jersey-art jersey-${index + 1}">
-            <span class="neck"></span>
-            <strong>${String(index + 1).padStart(2, "0")}</strong>
-          </div>
-          <div>
-            <h3>${jersey.name}</h3>
-            <p>${jersey.design}</p>
-            <div class="price">$${jersey.price}</div>
-          </div>
-        </article>
-      `,
-    )
-    .join("");
+  const site = validateSite(response.data);
+  return { ...site, model: response.model };
+}
 
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>custombasketball | Custom Basketball Jerseys</title>
-  <meta name="description" content="Build custom basketball jerseys for teams, leagues, and pickup crews with fast previews and premium stitched finishes.">
-  <link rel="stylesheet" href="./styles.css">
-</head>
-<body>
-  <header class="site-header">
-    <a class="brand" href="/">custombasketball</a>
-    <nav aria-label="Primary">
-      <a href="#jerseys">Jerseys</a>
-      <a href="#process">Process</a>
-      <a href="#quote">Quote</a>
-    </nav>
-  </header>
-  <main>
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Team uniforms made personal</p>
-        <h1>Custom basketball jerseys built for your exact roster.</h1>
-        <p class="lede">Pick a design route, add names and numbers, and get production-ready mockups for your squad.</p>
-        <a class="button" id="quote" href="mailto:orders@custombasketball.example">Start a team quote</a>
-      </div>
-      <div class="hero-jersey" aria-label="Featured custom jersey preview">
-        <span class="neck"></span>
-        <strong>23</strong>
-        <em>YOUR TEAM</em>
-      </div>
-    </section>
-    <section class="section-head" id="jerseys">
-      <p class="eyebrow">Five launch designs</p>
-      <h2>Choose the jersey that fits your game.</h2>
-    </section>
-    <section class="grid">
-      ${cards}
-    </section>
-    <section class="process" id="process">
-      <div>
-        <p class="eyebrow">How it works</p>
-        <h2>From roster to ready-to-print in three steps.</h2>
-      </div>
-      <ol>
-        <li>Send team colors, names, numbers, and sizes.</li>
-        <li>Review a production mockup for every player.</li>
-        <li>Approve the set and receive your ship date.</li>
-      </ol>
-    </section>
-  </main>
-</body>
-</html>`;
+function validateSite(site: KimiSiteResponse): Omit<SiteBuild, "model"> {
+  if (!site || typeof site !== "object") throw new Error("Kimi did not return a site object");
+  const html = normalizeGeneratedHtml(site.html);
+  const css = typeof site.css === "string" ? site.css.trim() : "";
+  const jerseys = Array.isArray(site.jerseys) ? site.jerseys.filter(isJersey).slice(0, 5) : [];
 
-  const css = `:root{color-scheme:light;--ink:#171717;--muted:#67615a;--line:#ded8cd;--paper:#fff;--tint:#f4f0e8;--gold:#dca43a;--blue:#243d73;--green:#2d7657}*{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f7f4ee;color:var(--ink)}a{color:inherit}.site-header{display:flex;align-items:center;justify-content:space-between;padding:24px clamp(20px,5vw,64px);background:rgba(255,255,255,.82);border-bottom:1px solid var(--line);position:sticky;top:0;backdrop-filter:blur(12px);z-index:2}.brand{font-weight:800;text-decoration:none;letter-spacing:-.03em}.site-header nav{display:flex;gap:22px;font-size:14px;color:var(--muted)}.site-header nav a{text-decoration:none}.hero{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:48px;align-items:center;padding:72px clamp(20px,6vw,88px) 52px}.eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:12px;font-weight:800;color:var(--green);margin:0 0 12px}.hero h1{font-size:clamp(42px,6vw,76px);line-height:.92;letter-spacing:-.06em;margin:0;max-width:820px}.lede{font-size:19px;line-height:1.55;color:var(--muted);max-width:620px;margin:24px 0 32px}.button{display:inline-flex;align-items:center;justify-content:center;background:var(--ink);color:white;border-radius:999px;padding:14px 22px;text-decoration:none;font-weight:750}.hero-jersey,.jersey-art{position:relative;display:grid;place-items:center;aspect-ratio:.78;border-radius:28px 28px 18px 18px;background:linear-gradient(135deg,var(--blue),#111827 52%,var(--gold));box-shadow:0 28px 80px -45px rgba(0,0,0,.65);overflow:hidden}.hero-jersey:before,.jersey-art:before{content:"";position:absolute;inset:18px;border:2px solid rgba(255,255,255,.28);border-radius:22px 22px 14px 14px}.neck{position:absolute;top:-18px;width:96px;height:64px;border-radius:0 0 999px 999px;background:#f7f4ee}.hero-jersey strong{font-size:116px;color:#fff;letter-spacing:-.08em;z-index:1}.hero-jersey em{position:absolute;bottom:72px;color:#fff;font-style:normal;font-weight:900;letter-spacing:.12em}.section-head{padding:24px clamp(20px,6vw,88px)}.section-head h2,.process h2{font-size:clamp(28px,4vw,46px);line-height:1;letter-spacing:-.04em;margin:0}.grid{display:grid;grid-template-columns:repeat(5,minmax(180px,1fr));gap:16px;padding:10px clamp(20px,6vw,88px) 72px}.jersey-card{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:16px}.jersey-card h3{font-size:18px;margin:0 0 8px}.jersey-card p{color:var(--muted);font-size:14px;line-height:1.45;margin:0}.price{margin-top:16px;font-weight:900}.jersey-art{border-radius:20px;min-height:210px}.jersey-art strong{color:white;font-size:56px;z-index:1}.jersey-2{background:linear-gradient(135deg,#fff,#9cc8e8 60%,#243d73)}.jersey-3{background:linear-gradient(135deg,#ff7d59,#1d2f55)}.jersey-4{background:linear-gradient(135deg,#22543d,#f4e8c1)}.jersey-5{background:linear-gradient(135deg,#111827,#243d73 60%,#cbd5e1)}.process{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin:0 clamp(20px,6vw,88px) 72px;padding:32px;background:#fff;border:1px solid var(--line);border-radius:8px}.process ol{margin:0;padding-left:22px;color:var(--muted);line-height:1.8;font-weight:650}@media(max-width:980px){.hero{grid-template-columns:1fr}.hero-jersey{max-width:360px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.process{grid-template-columns:1fr}}@media(max-width:560px){.site-header{align-items:flex-start;gap:14px;flex-direction:column}.grid{grid-template-columns:1fr}.hero{padding-top:44px}.hero h1{font-size:42px}}`;
+  if (!html.includes("<!doctype html") && !html.includes("<!DOCTYPE html")) throw new Error("Kimi HTML is missing a doctype");
+  if (!/<html[\s>]/i.test(html)) throw new Error("Kimi HTML is missing an html element");
+  if (/<script[\s>]/i.test(html)) throw new Error("Kimi HTML must not contain scripts");
+  if (css.length < 800) throw new Error("Kimi CSS was too small to be a complete design");
+  if (jerseys.length !== 5) throw new Error("Kimi must return exactly 5 jersey products");
 
   return { html, css, jerseys };
+}
+
+function normalizeGeneratedHtml(value: unknown): string {
+  let html = typeof value === "string" ? value.trim() : "";
+  if (!html) throw new Error("Kimi HTML was empty");
+  if (!/<link[^>]+href=["']\.\/styles\.css["']/i.test(html) && /<\/head>/i.test(html)) {
+    html = html.replace(/<\/head>/i, '  <link rel="stylesheet" href="./styles.css">\n</head>');
+  }
+  return html;
+}
+
+function isJersey(value: unknown): value is SiteJersey {
+  if (!value || typeof value !== "object") return false;
+  const jersey = value as Partial<SiteJersey>;
+  return typeof jersey.name === "string" && typeof jersey.design === "string" && typeof jersey.price === "number";
 }
 
 function parseBrief(): JobRequest {

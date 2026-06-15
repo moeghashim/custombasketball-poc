@@ -38,10 +38,12 @@ One page, one button — **"Create the website"**. Click it and **Maestro** (a r
 always-on orchestrator) runs two specialists in sequence, each **in its own sandbox**,
 with the page narrating it all **live**:
 
-1. **Nic** (website builder) → builds **`custombasketball`** with **5 custom jerseys**,
-   deploys it to **Railway**, returns a durable live URL.
-2. **Max** (SEO) → audits that live site, produces **suggested changes**, hands them
-   back to Maestro.
+1. **Nic** (website builder) → uses **Kimi K2.7 Code** to build **`custombasketball`**
+   with **5 custom jerseys**, deploys it to **Railway**, returns a durable live URL.
+2. **Max** (SEO) → audits that live site with Lighthouse, uses **Kimi K2.7 Code** to
+   produce suggested SEO/code changes, hands them back to Maestro.
+3. **Maestro** → uses **OpenAI `gpt-5.5` with high reasoning** to evaluate Max's proposal
+   before acknowledging the handoff.
 
 ### Success criteria
 
@@ -53,9 +55,9 @@ and watching (plus a peek at Maestro's DB):
    with 5 jerseys, deployed to **Railway** and still reachable at its Railway-provided
    domain after the run finishes. *(user #1)*
 3. **Max audits that live URL and produces concrete output** — real findings (SEO score
-   + specific issues) and a list of **suggested changes**.
-4. **Max hands the suggestions to Maestro**, which receives them and acknowledges "would
-   execute". Applying the fixes is out of scope. *(user #2)*
+   + specific issues), a list of **suggested changes**, and a constrained proposal.
+4. **Max hands the suggestions to Maestro**, which evaluates them with `gpt-5.5` high
+   reasoning and acknowledges the decision. Applying the fixes is out of scope. *(user #2)*
 5. **Nic and Max are real CLIs that run in Blaxel sandboxes**, fired by Maestro via the
    **job contract** (a signed request → a signed result). Maestro has **no CLI**.
 6. **Maestro is real, not a stub:** an always-on service that records every job in
@@ -117,7 +119,7 @@ contract, or the sandbox.
         │  fire job (signed request)                  ▲ signed events + result
         ▼                                             │ (HTTPS webhook)
 [ Blaxel sandbox — ephemeral, one per job ]  run `nic build` / `max audit`
-        └─ Nic → deploy site to Railway → { url }   Max → Lighthouse(url) → { suggestions }
+        └─ Nic → Kimi site → Railway → { url }   Max → Lighthouse + Kimi → { proposal }
 ```
 
 **The round trip, per step:**
@@ -130,7 +132,8 @@ contract, or the sandbox.
    webhooks back," exactly.
 4. Maestro verifies the signature, writes `results`, relays each event to the page over
    SSE, sets `succeeded`/`failed`, deletes the sandbox, and **advances** to the next step.
-5. After Max: Maestro holds the suggestions and acknowledges "would execute".
+5. After Max: Maestro evaluates the proposal with `gpt-5.5` / high reasoning, records the
+   evaluation, and acknowledges the decision.
 
 ### Maestro — the orchestrator (real, thin only where it can be)
 - **Always-on Express service. No CLI.** It owns the run.
@@ -142,7 +145,8 @@ contract, or the sandbox.
 - **The job contract:** fires each specialist with a structured **request** and accepts
   a structured, **HMAC-signed response** at its webhook — same shape as design §9.
 - **Fires specialists into Blaxel sandboxes** (next), waits for the signed result,
-  validates + records it, advances.
+  validates + records it, advances. After Max, Maestro evaluates the returned proposal with
+  OpenAI `gpt-5.5` high reasoning.
 - **Deployed, not local.** Maestro runs as a **Render web service** (provisioned via
   Stripe Projects), so it has a stable public URL — the Blaxel sandboxes post their signed
   results straight to it, no tunnel. Render's env carries the Stripe Projects creds
@@ -182,9 +186,9 @@ shared helper is enough. Note in comments where the real version differs.
   keeps them faithful to the contract and the page live.
 
 ### Nic — the website builder
-- CLI `nic build`, running inside its **Blaxel** sandbox. Generates **`custombasketball`**
-  — a static store with **5 custom jerseys** from a **hard-coded template** + placeholder
-  imagery (no LLM).
+- CLI `nic build`, running inside its **Blaxel** sandbox. Uses **Kimi K2.7 Code** to
+  generate **`custombasketball`** — a static store with **5 custom jerseys**. Nic validates
+  the returned HTML/CSS JSON before deployment.
 - **Deploys the generated site to Railway** via the `railway` CLI installed in the shared
   Blaxel image. Nic packages the static files with a tiny Node 20 static server, creates
   or targets a Railway hosting service, uploads it with `railway up`, generates or reads
@@ -196,7 +200,8 @@ shared helper is enough. Note in comments where the real version differs.
 ### Max — the SEO specialist
 - CLI `max audit --brief '{… url …}'`, running inside its **Blaxel** sandbox. Runs
   **Lighthouse** (`lighthouse` + `chrome-launcher`) against the Railway URL → the **SEO
-  category score** + the failing audits.
+  category score** + the failing audits, then uses **Kimi K2.7 Code** to turn those facts
+  into a constrained SEO proposal.
 - **Why a Chrome-capable image:** Lighthouse doesn't read HTML — it *loads the page in a
   real headless Chromium* and measures it (that's where the SEO/perf/a11y scores come
   from). So the sandbox's container image must contain Chromium + its system libs.
@@ -205,11 +210,13 @@ shared helper is enough. Note in comments where the real version differs.
   `image:` of `createIfNotExists`. Launch Chrome with `--no-sandbox --headless
   --disable-dev-shm-usage` (it runs as root in a container). *(Alternative: install
   Chromium at job start — smaller image, slower per run.)*
-- Output = **findings + suggested changes**, derived from the failing audits → mapped to
-  the report stage's KPIs/chart (SEO score, issues found, fixes proposed).
-- Final result `{ findings, suggestions }`. Maestro receives it, the page shows the
-  `report` stage completing with `doneLabel: "Handed to Maestro"`, Maestro acknowledges.
-  The POC does **not** execute the fixes (out of scope).
+- Output = **findings + suggested changes + constrained proposal**, derived from Lighthouse
+  and Kimi → mapped to the report stage's KPIs/chart (SEO score, issues found, fixes
+  proposed).
+- Final result `{ findings, suggestions, proposal }`. Maestro receives it, evaluates the
+  proposal with **OpenAI `gpt-5.5` high reasoning**, the page shows the `report` stage
+  completing with `doneLabel: "Handed to Maestro"`, and Maestro acknowledges the decision.
+  The POC still does **not** execute the fixes without an approval/apply gate.
 
 > **Future — hosting is a router, not one vendor.** The POC now uses Railway because it is
 > provisionable through Stripe Projects and can host the generated app durably. In
@@ -223,7 +230,8 @@ shared helper is enough. Note in comments where the real version differs.
 ## 4. Explicit cuts (do NOT build these)
 - **Multi-tenancy, auth** — one hard-coded demo (`custombasketball`, 5 jerseys), no users.
 - **The brain repo / `dashboard.json` / catalog** — none. Briefs are composed in code.
-- **plan/apply gate + broker** — Max *suggests*; nothing is executed. No approval card.
+- **plan/apply gate + broker** — Max *suggests* and Maestro evaluates; nothing is executed.
+  No approval card.
 - **Durable-orchestration extras** — keep the `jobs` state machine + `results`; skip the
   outbox/inbox, leases, retries, reconciliation sweep.
 - **agent-cli-kit** — CLIs use a minimal hand-rolled helper, not the full kit.
@@ -248,14 +256,16 @@ contract, the signed webhook round trip, and **Blaxel sandboxes** for the specia
    /api/jobs/:id/ingest`. **Deploy to Render** so the webhook has a public URL.
 4. **Recreate the Process Steps page** in live mode; drive its controller from the SSE
    stream (prove it with fake events first).
-5. **The `nic build` CLI:** generate `custombasketball` (5 jerseys) → deploy the generated
-   app to Railway (`railway up`, durable Railway domain) → POST `log`/`data`/`complete`
-   events + final `{ url }` to the callback.
-6. **The `max audit` CLI:** Lighthouse the Railway URL → POST `report`-stage events +
-   final `{ findings, suggestions }`.
-7. **Blaxel wiring:** Maestro creates a Blaxel sandbox per job (`@blaxel/core`), injects the
+5. **The `nic build` CLI:** use Kimi K2.7 Code to generate `custombasketball` (5 jerseys)
+   → deploy the generated app to Railway (`railway up`, durable Railway domain) → POST
+   `log`/`data`/`complete` events + final `{ url }` to the callback.
+6. **The `max audit` CLI:** Lighthouse the Railway URL → use Kimi K2.7 Code to produce an
+   SEO proposal → POST `report`-stage events + final `{ findings, suggestions, proposal }`.
+7. **Maestro evaluation:** use OpenAI `gpt-5.5` with high reasoning to evaluate Max's
+   proposal, record the evaluation, and ack it to the page.
+8. **Blaxel wiring:** Maestro creates a Blaxel sandbox per job (`@blaxel/core`), injects the
    brief + secrets, `exec`s the CLI, tears it down on result. (Max's image is Chrome-capable.)
-8. **Wire the callback:** Maestro passes its public **Render URL** as `callback_url` in
+9. **Wire the callback:** Maestro passes its public **Render URL** as `callback_url` in
    each job request; the Blaxel sandboxes post events/results straight there.
 
 ---
@@ -265,8 +275,9 @@ contract, the signed webhook round trip, and **Blaxel sandboxes** for the specia
   sandbox** — and the **`jobs` table shows the two jobs** moving through the state machine.
 - Nic builds `custombasketball` (5 jerseys), deploys it to **Railway**, and yields
   a **real, durable live URL** that survives past the end of the run.
-- Max audits the URL with **Lighthouse** → findings + suggestions; **POSTs a signed
-  result** to Maestro, which records it and acknowledges "would execute".
+- Max audits the URL with **Lighthouse + Kimi K2.7 Code** → findings + suggestions +
+  proposal; **POSTs a signed result** to Maestro, which records it, evaluates it with
+  **OpenAI `gpt-5.5` high reasoning**, and acknowledges the decision.
 - The page narrates it **live** (`build` then `report` stages) from the real streamed
   events, and **looks like** `Process Steps v2.html`.
 
@@ -285,8 +296,9 @@ Build exactly this; don't substitute.
 | Language · runtime · pkg-mgr | **TypeScript** · **Node 20** · **`tsx`** · **npm**. |
 | Maestro service | **Express** + **SSE** (`/api/run`, `/api/events`) + a **signed webhook** (`/api/jobs/:id/ingest`). **Deployed to Render** via Stripe Projects (public URL — sandboxes post straight to it, no tunnel). |
 | The page | **The design, recreated as-is** — React + Babel from CDN, no build step; live mode. |
-| Nic | CLI `nic build` (in a Blaxel sandbox); **hard-coded** `custombasketball` (5 jerseys); deploys the site to **Railway**. |
-| Max | CLI `max audit` (in a Chrome-capable Blaxel sandbox); **Lighthouse** → suggestions. |
+| Nic | CLI `nic build` (in a Blaxel sandbox); **Kimi K2.7 Code** generates `custombasketball` (5 jerseys); deploys the site to **Railway**. |
+| Max | CLI `max audit` (in a Chrome-capable Blaxel sandbox); **Lighthouse + Kimi K2.7 Code** → constrained SEO proposal. |
+| Maestro evaluation | **OpenAI `gpt-5.5` with `reasoning.effort=high`** evaluates Max's returned proposal before ack. |
 | Job contract | Request `{ job_id, agent, task, brief, callback_url }` + HMAC secret → **HMAC-signed** events + final `{ok,data,error,meta}` to Maestro's webhook. |
 
 ### Folder layout (build exactly this)

@@ -2,11 +2,21 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createJob, getJob, hasDatabaseConfig, migrate, updateJobStatus, waitForTerminalJob } from "./db.js";
+import { callOpenAIJson } from "../shared/ai.js";
+import { createJob, getJob, hasDatabaseConfig, insertResult, migrate, updateJobStatus, waitForTerminalJob } from "./db.js";
 import { normalizeRuntimeEnv } from "./runtime-env.js";
 import { addSseClient, broadcastFlow } from "./sse.js";
 import { installWebhook } from "./webhook.js";
 import type { AgentName, JobRecord, StageId } from "../shared/types.js";
+
+interface MaestroEvaluation {
+  decision: "approve" | "revise" | "reject";
+  safe_to_execute: boolean;
+  summary: string;
+  concerns: string[];
+  accepted_changes: number;
+  required_followups: string[];
+}
 
 normalizeRuntimeEnv();
 
@@ -148,10 +158,22 @@ async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
     throw new Error(maxDone.error || "Max failed without a usable result");
   }
 
+  const evaluation = await evaluateMaxProposal(siteUrl, maxDone.output?.data);
+  await insertResult(max.id, "event", { event: "maestro_evaluation", payload: evaluation });
+  broadcastFlow({
+    event: "data",
+    step: "report",
+    patch: {
+      maestroEvaluation: evaluation.summary,
+      meta: ["Evaluated by Maestro", evaluation.decision, evaluation.safe_to_execute ? "Safe to execute" : "Needs revision"],
+    },
+    run_id: runId,
+  });
+
   broadcastFlow({
     event: "ack",
     step: "report",
-    text: "Maestro received Max's suggestions and would execute them after approval.",
+    text: `Maestro evaluated Max's proposal with ${process.env.OPENAI_MODEL || "gpt-5.5"} (${process.env.OPENAI_REASONING_EFFORT || "high"}) and decided: ${evaluation.decision}. ${evaluation.summary}`,
     run_id: runId,
   });
 }
@@ -221,10 +243,15 @@ function commandFor(agent: AgentName, task: string, request: Record<string, unkn
 }
 
 function envForJob(agent: AgentName): string[] {
-  if (agent !== "nic") return [];
-  const keys = Object.keys(process.env).filter((key) => /^(RAILWAY|GENERATED_SITE_HOST)_/.test(key));
-  if (!keys.some((key) => /^RAILWAY_(API_)?TOKEN$/.test(key) || /^GENERATED_SITE_HOST_.*TOKEN$/.test(key))) {
+  const keys = Object.keys(process.env).filter((key) => {
+    if (/^(KIMI|MOONSHOT)_/.test(key)) return true;
+    return agent === "nic" && /^(RAILWAY|GENERATED_SITE_HOST)_/.test(key);
+  });
+  if (agent === "nic" && !keys.some((key) => /^RAILWAY_(API_)?TOKEN$/.test(key) || /^GENERATED_SITE_HOST_.*TOKEN$/.test(key))) {
     throw new Error("RAILWAY_API_TOKEN or RAILWAY_TOKEN is required");
+  }
+  if (!keys.some((key) => /^(KIMI_API_KEY|MOONSHOT_API_KEY)$/.test(key))) {
+    throw new Error("KIMI_API_KEY or MOONSHOT_API_KEY is required");
   }
   return keys.map((key) => `${key}=${shellQuote(requiredEnv(key))}`);
 }
@@ -248,4 +275,53 @@ function assertProcessSucceeded(result: Record<string, unknown>): void {
   const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
   const detail = stderr || stdout || `exit code ${exitCode}`;
   throw new Error(`Sandbox process failed: ${detail}`);
+}
+
+async function evaluateMaxProposal(siteUrl: string, maxData: unknown): Promise<MaestroEvaluation> {
+  const response = await callOpenAIJson<MaestroEvaluation>({
+    system:
+      "You are Maestro, a careful orchestrator reviewing an SEO/code proposal from a specialist. Return only valid JSON. Evaluate whether the proposed changes are safe, scoped, and useful for the generated website.",
+    user: JSON.stringify({
+      site_url: siteUrl,
+      max_result: maxData,
+      policy: [
+        "Approve only low-risk changes that stay inside static SEO/content files.",
+        "Reject or revise changes that require secrets, new services, tracking scripts, external assets, destructive actions, or unclear targets.",
+        "Do not rewrite the proposal. Evaluate it and state what Maestro would do next.",
+      ],
+    }),
+    schema: {
+      name: "maestro_seo_evaluation",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["decision", "safe_to_execute", "summary", "concerns", "accepted_changes", "required_followups"],
+        properties: {
+          decision: { type: "string", enum: ["approve", "revise", "reject"] },
+          safe_to_execute: { type: "boolean" },
+          summary: { type: "string" },
+          concerns: { type: "array", items: { type: "string" } },
+          accepted_changes: { type: "number" },
+          required_followups: { type: "array", items: { type: "string" } },
+        },
+      },
+    },
+  });
+  return validateEvaluation(response.data);
+}
+
+function validateEvaluation(value: MaestroEvaluation): MaestroEvaluation {
+  if (!value || typeof value !== "object") throw new Error("Maestro model did not return an evaluation object");
+  const decision = value.decision === "approve" || value.decision === "reject" || value.decision === "revise" ? value.decision : "revise";
+  const summary = typeof value.summary === "string" && value.summary.trim() ? value.summary.trim() : "Maestro could not summarize the proposal.";
+  return {
+    decision,
+    safe_to_execute: Boolean(value.safe_to_execute),
+    summary,
+    concerns: Array.isArray(value.concerns) ? value.concerns.filter((item): item is string => typeof item === "string") : [],
+    accepted_changes: typeof value.accepted_changes === "number" ? value.accepted_changes : 0,
+    required_followups: Array.isArray(value.required_followups)
+      ? value.required_followups.filter((item): item is string => typeof item === "string")
+      : [],
+  };
 }

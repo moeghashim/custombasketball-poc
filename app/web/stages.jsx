@@ -138,6 +138,7 @@ function StageReport({ data, progress, finished }) {
                     {data.suggestions.slice(0, 3).map((item, i) => <li key={i}>{item}</li>)}
                   </ul>
                 )}
+                {data.maestroEvaluation && <p className="rp-ack">{data.maestroEvaluation}</p>}
                 {data.acknowledgement && <p className="rp-ack">{data.acknowledgement}</p>}
               </div>
             )}

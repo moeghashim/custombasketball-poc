@@ -23,7 +23,7 @@
         "id": "build",
         "type": "build",
         "title": "Designing & building the website",
-        "sub": "Nic generates the storefront and deploys to Railway",
+        "sub": "Nic uses Kimi K2.7 Code and deploys to Railway",
         "working": "Building & deploying",
         "data": { "url": "Waiting for Railway URL", "logs": [] }
       },
@@ -31,7 +31,7 @@
         "id": "report",
         "type": "report",
         "title": "Auditing & handing off SEO",
-        "sub": "Max runs Lighthouse and sends suggestions to Maestro",
+        "sub": "Max uses Lighthouse and Kimi, then Maestro evaluates",
         "working": "Auditing live URL",
         "data": {
           "eyebrow": "Lighthouse SEO audit",
@@ -79,7 +79,7 @@
       }
       if (payload.event === 'progress') controller.progress(step, payload.n || 0);
       if (payload.event === 'complete') controller.complete(step, { advance: false });
-      if (payload.event === 'ack') controller.mergeData(step, { acknowledgement: 'Maestro acknowledged the suggestions and would execute them after approval.' });
+      if (payload.event === 'ack') controller.mergeData(step, { acknowledgement: payload.text || 'Maestro acknowledged the suggestions and would execute them after approval.' });
       if (payload.event === 'error') controller.pushLog('build', { kind: 'dim', text: payload.text || 'Run failed' });
     }
 
