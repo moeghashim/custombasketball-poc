@@ -21,12 +21,14 @@ build the app under `app/` (layout in §7).
   **Commit and push as you go.** **Do not** add this POC to the tenwhy repo.
 
 ### Before you build — verify (don't guess)
-- `stripe projects catalog render · neon · blaxel · railway` — confirm the exact service
+- `stripe projects catalog render · neon · blaxel` — confirm the exact service
   refs, **and that your country supports paid provisioning** for them.
 - **Blaxel:** how to build + push a custom sandbox image (the Node 20 + Chromium + CLIs
   image) — check the Blaxel docs.
-- **Railway:** verify `railway/hosting` exists in Stripe Projects and that the Railway
-  CLI can deploy non-interactively with `RAILWAY_API_TOKEN` or `RAILWAY_TOKEN`.
+- **Railway:** the working path uses a **manually configured `RAILWAY_API_TOKEN`** — Stripe
+  Projects `railway/hosting` did not emit usable creds (see
+  `docs/stripe-projects-failure-report.md`). Verify the Railway CLI can deploy
+  non-interactively with `RAILWAY_API_TOKEN` (or `RAILWAY_TOKEN`).
 - The 5 jerseys' demo content (names / designs / prices) is yours to invent — keep it
   plausible.
 
@@ -220,8 +222,10 @@ shared helper is enough. Note in comments where the real version differs.
   completing with `doneLabel: "Handed to Maestro"`, and Maestro acknowledges the decision.
   The POC still does **not** execute the fixes without an approval/apply gate.
 
-> **Future — hosting is a router, not one vendor.** The POC now uses Railway because it is
-> provisionable through Stripe Projects and can host the generated app durably. In
+> **Future — hosting is a router, not one vendor.** The POC uses Railway because it hosts the
+> generated app durably with a simple CLI deploy and proved out end-to-end — via a **manual
+> `RAILWAY_API_TOKEN`**, since Stripe Projects `railway/hosting` is not yet wired (see
+> `docs/stripe-projects-failure-report.md`). In
 > production, Nic routes **by app type**: **Cloudflare** for static and SSR/edge apps
 > (Pages/Workers), **Railway** for apps that need a persistent always-on server or an
 > arbitrary container/Docker runtime. The job contract doesn't change — Nic just returns a
@@ -250,9 +254,10 @@ contract, the signed webhook round trip, and **Blaxel sandboxes** for the specia
 1. **Scaffold** `app/` (one npm project: TypeScript, Node 20, tsx).
 2. **Provision via Stripe Projects:** `stripe plugin install projects` → `projects init`
    → `projects add neon` → `projects add render` → `projects add blaxel` →
-   `projects add railway/hosting` → `projects env --pull` (lands `DATABASE_URL`,
-   Blaxel creds, and Railway hosting/token variables). Set the Railway env vars in
-   Maestro's Render env so Nic's sandbox can deploy.
+   `projects env --pull` (lands `DATABASE_URL`, Blaxel creds). **Railway is configured
+   manually:** Stripe Projects `railway/hosting` did not emit usable creds (see
+   `docs/stripe-projects-failure-report.md`), so set a `RAILWAY_API_TOKEN` directly in
+   Maestro's Render env — Nic's sandbox inherits it.
 3. **Maestro core + deploy:** Express + Neon (`jobs`, `results` + the state machine) +
    `POST /api/run`, `GET /api/events` (SSE), and the **signed webhook** `POST
    /api/jobs/:id/ingest`. **Deploy to Render** so the webhook has a public URL.
@@ -292,10 +297,10 @@ Build exactly this; don't substitute.
 
 | Concern | Locked choice |
 |---|---|
-| Provisioning · creds · billing | **Stripe Projects** — `add neon`, `add render`, `add blaxel`, `add railway/hosting`; `env --pull`. *(success #2)* |
+| Provisioning · creds · billing | **Stripe Projects** — `add neon`, `add render`, `add blaxel`; `env --pull`. Railway is **not** provisioned here — its `railway/hosting` resource didn't emit creds (see failure report), so it uses a manual `RAILWAY_API_TOKEN`. *(success #2)* |
 | Maestro's store | **Neon Postgres** via Stripe Projects — `jobs` + `results` tables + the state machine. |
 | Specialist sandbox | **Blaxel** (`@blaxel/core`) — ephemeral, one sandbox per job (`createIfNotExists` → `process.exec` → `delete`). Provisioned via Stripe Projects. Max's image is **Chrome-capable**. |
-| Generated-site host | **Railway hosting** via Stripe Projects. Nic packages the generated site as a tiny Node 20 static server, deploys with the Railway CLI, and returns the Railway public URL. |
+| Generated-site host | **Railway** (manual `RAILWAY_API_TOKEN` — Stripe Projects `railway/hosting` not yet wired; see failure report). Nic packages the generated site as a tiny Node 20 static server, deploys with the Railway CLI (`railway up`), and returns the Railway public URL. |
 | Language · runtime · pkg-mgr | **TypeScript** · **Node 20** · **`tsx`** · **npm**. |
 | Maestro service | **Express** + **SSE** (`/api/run`, `/api/events`) + a **signed webhook** (`/api/jobs/:id/ingest`). **Deployed to Render** via Stripe Projects (public URL — sandboxes post straight to it, no tunnel). |
 | The page | **The design, recreated as-is** — React + Babel from CDN, no build step; live mode. |
@@ -322,9 +327,11 @@ Build exactly this; don't substitute.
         └── max/              # max audit CLI  (runs inside a Blaxel sandbox)
 ```
 
-**Accounts that must exist:** Neon, Render, Blaxel, and Railway **(via Stripe Projects** —
-confirm catalog refs with `stripe projects catalog <name>`**)**. Blaxel needs a Node-20
-base image — and for Max, a **Chrome-capable** one (see Max, above).
+**Accounts that must exist:** Neon, Render, Blaxel **(via Stripe Projects** — confirm catalog
+refs with `stripe projects catalog <name>`**)**, plus **Railway** (configured with a manual
+`RAILWAY_API_TOKEN`; Stripe Projects `railway/hosting` is not yet wired — see the failure
+report). Blaxel needs a Node-20 base image — and for Max, a **Chrome-capable** one (see Max,
+above).
 
 ---
 
