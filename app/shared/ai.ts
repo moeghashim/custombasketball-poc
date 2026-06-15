@@ -26,7 +26,7 @@ export async function callKimiJson<T>(params: {
       { role: "system", content: params.system },
       { role: "user", content: params.user },
     ],
-    temperature: params.temperature ?? 0.2,
+    temperature: 1,
     max_tokens: params.maxTokens ?? 6000,
     response_format: { type: "json_object" },
   };
