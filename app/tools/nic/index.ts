@@ -186,7 +186,7 @@ async function deployRailwaySite(
     createdService = project;
   }
 
-  const deployArgs = ["up", "--detach", "--json", "--yes", "--message", `custombasketball ${project}`];
+  const deployArgs = ["up", "--json", "--message", `custombasketball ${project}`];
   const deployService = configuredService || createdService;
   if (configuredProject) deployArgs.push("--project", configuredProject);
   if (configuredEnvironment) deployArgs.push("--environment", configuredEnvironment);
