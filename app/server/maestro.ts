@@ -98,6 +98,11 @@ function sendIndex(res: express.Response): void {
   res.sendFile(path.join(webRoot, "index.html"));
 }
 
+function pauseForVisibleHandoff(): Promise<void> {
+  const delayMs = Number(process.env.STEP_HANDOFF_PAUSE_MS || 3000);
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, delayMs)));
+}
+
 async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
   broadcastFlow({ event: "activate", step: "build", run_id: runId });
 
@@ -124,6 +129,7 @@ async function orchestrateRun(runId: string, baseUrl: string): Promise<void> {
   const siteUrl = (nicDone.output.data as { url?: string }).url;
   if (!siteUrl) throw new Error("Nic result did not include a Daytona URL");
 
+  await pauseForVisibleHandoff();
   broadcastFlow({ event: "activate", step: "report", run_id: runId });
 
   const max = await createJob({

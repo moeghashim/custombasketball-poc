@@ -60,15 +60,26 @@
     const root = ReactDOM.createRoot(document.getElementById('root'));
     const controller = window.flowController = createFlowController(window.FLOW);
 
+    function liveUrlFromBuild() {
+      const build = controller.getState().steps.find((_, i) => window.FLOW.steps[i]?.id === 'build');
+      const url = build?.data?.url;
+      return typeof url === 'string' && /^https?:\/\//.test(url) ? url : '';
+    }
+
     function applyFlowEvent(payload) {
       if (!payload || !payload.event) return;
       const step = payload.step || 'system';
       if (payload.event === 'activate') controller.activate(step);
       if (payload.event === 'log') controller.pushLog(step, { kind: payload.kind || '', text: payload.text || '' });
-      if (payload.event === 'data') controller.mergeData(step, payload.patch || {});
+      if (payload.event === 'data') {
+        const patch = payload.patch || {};
+        controller.mergeData(step, patch);
+        const buildUrl = step === 'build' && typeof patch.url === 'string' ? patch.url : liveUrlFromBuild();
+        if (/^https?:\/\//.test(buildUrl)) controller.mergeData('report', { auditedUrl: buildUrl });
+      }
       if (payload.event === 'progress') controller.progress(step, payload.n || 0);
       if (payload.event === 'complete') controller.complete(step, { advance: false });
-      if (payload.event === 'ack') controller.mergeData(step, { meta: ['Maestro acknowledged', 'Would execute after approval'] });
+      if (payload.event === 'ack') controller.mergeData(step, { acknowledgement: 'Maestro acknowledged the suggestions and would execute them after approval.' });
       if (payload.event === 'error') controller.pushLog('build', { kind: 'dim', text: payload.text || 'Run failed' });
     }
 

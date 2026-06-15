@@ -60,7 +60,7 @@ function StageBuild({ data, progress, started }) {
         </div>
         {liveUrl && (
           <div className="share-url">
-            <span>Daytona preview</span>
+            <span>Share this URL</span>
             <a href={liveUrl} target="_blank" rel="noreferrer">{liveUrl}</a>
           </div>
         )}
@@ -81,10 +81,22 @@ function StageBuild({ data, progress, started }) {
   );
 }
 
+function reportSummary(data) {
+  if (data.summary) return data.summary;
+  const kpis = Array.isArray(data.kpis) ? data.kpis : [];
+  const score = kpis.find((k) => k.label === 'SEO score')?.value;
+  const issues = kpis.find((k) => k.label === 'Issues found')?.value;
+  const fixes = kpis.find((k) => k.label === 'Fixes proposed')?.value;
+  if (typeof score !== 'number' || typeof issues !== 'number' || typeof fixes !== 'number') return '';
+  return `Max ran Lighthouse SEO on the Daytona preview, scored ${score}%, found ${issues} issue${issues === 1 ? '' : 's'}, and proposed ${fixes} fix${fixes === 1 ? '' : 'es'}.`;
+}
+
 function StageReport({ data, progress, finished }) {
   const kpis = data.kpis || [];
   const chart = data.chart || [];
   const p = progress || 0;
+  const summary = reportSummary(data);
+  const auditedUrl = typeof data.auditedUrl === 'string' && /^https?:\/\//.test(data.auditedUrl) ? data.auditedUrl : '';
   return (
     <div className="stage-pad">
       <div className="stage-cap"><span className="dot"></span>Compiling the SEO report</div>
@@ -98,6 +110,12 @@ function StageReport({ data, progress, finished }) {
             {data.meta && <div className="rp-meta">{data.meta.map((m, i) => (
               <React.Fragment key={i}>{i > 0 && <span>/</span>}<span>{m}</span></React.Fragment>))}
             </div>}
+            {auditedUrl && (
+              <div className="audit-url">
+                <span>Audited preview</span>
+                <a href={auditedUrl} target="_blank" rel="noreferrer">{auditedUrl}</a>
+              </div>
+            )}
             <div className="rp-kpis">
               {kpis.map((k, i) => (
                 <div key={i} className="rp-kpi" style={{ opacity: p >= 2 + i ? 1 : 0, transform: p >= 2 + i ? 'none' : 'translateY(6px)' }}>
@@ -112,14 +130,15 @@ function StageReport({ data, progress, finished }) {
             <div className="rp-lines">
               {[88, 96, 72].map((w, i) => <span key={i} className={`rp-ln${p >= 5 ? ' on' : ''}`} style={{ width: `${w}%` }}></span>)}
             </div>
-            {(data.summary || data.suggestions) && (
+            {(summary || data.suggestions || data.acknowledgement) && (
               <div className={`rp-summary${p >= 5 || finished ? ' on' : ''}`}>
-                {data.summary && <p>{data.summary}</p>}
+                {summary && <p>{summary}</p>}
                 {Array.isArray(data.suggestions) && data.suggestions.length > 0 && (
                   <ul>
                     {data.suggestions.slice(0, 3).map((item, i) => <li key={i}>{item}</li>)}
                   </ul>
                 )}
+                {data.acknowledgement && <p className="rp-ack">{data.acknowledgement}</p>}
               </div>
             )}
           </div>
