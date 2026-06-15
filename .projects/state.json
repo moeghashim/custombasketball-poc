@@ -9,10 +9,20 @@
     }
   },
   "resources": {
+    "blaxel-tier-1": {
+      "name": "blaxel-tier-1",
+      "providerName": "Blaxel",
+      "serviceId": "tier-1"
+    },
     "maestro-db": {
       "name": "maestro-db",
       "providerName": "Neon",
       "serviceId": "postgres"
+    },
+    "specialist-sandbox": {
+      "name": "specialist-sandbox",
+      "providerName": "Blaxel",
+      "serviceId": "sandbox"
     }
   }
 }

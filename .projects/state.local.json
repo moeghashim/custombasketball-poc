@@ -30,6 +30,17 @@
     }
   },
   "resources": {
+    "blaxel-tier-1": {
+      "configuration": {},
+      "createdAt": "2026-06-15T02:47:49.730Z",
+      "lastRevealedAt": "2026-06-15T02:47:50.170Z",
+      "lastStatus": "complete",
+      "name": "blaxel-tier-1",
+      "providerId": "prvdr_61UnoL4ZPCBLxqCQW5WJU",
+      "providerName": "Blaxel",
+      "resourceId": "fres_61UroWEYkWPzro4dA16USyeR0wSQFQxSjdH6rCSY4D7w",
+      "serviceId": "tier-1"
+    },
     "maestro-db": {
       "configuration": {},
       "createdAt": "2026-06-15T02:42:48.989Z",
@@ -40,6 +51,23 @@
       "providerName": "Neon",
       "resourceId": "fres_61UroRUTYhUCnfASq16USyeR0wSQFQxSjdH6rCSY4HMO",
       "serviceId": "postgres"
+    },
+    "specialist-sandbox": {
+      "configuration": {
+        "display_name": "custombasketball-specialists",
+        "image": "blaxel/node:latest",
+        "memory": 4096,
+        "region": "us-pdx-1",
+        "ttl": "24h"
+      },
+      "createdAt": "2026-06-15T02:47:59.219Z",
+      "lastRevealedAt": "2026-06-15T02:47:59.607Z",
+      "lastStatus": "complete",
+      "name": "specialist-sandbox",
+      "providerId": "prvdr_61UnoL4ZPCBLxqCQW5WJU",
+      "providerName": "Blaxel",
+      "resourceId": "fres_61UroWTW664elKEIE16USyeR0wSQFQxSjdH6rCSY4JNI",
+      "serviceId": "sandbox"
     }
   }
 }
